@@ -368,6 +368,7 @@ class Bam2bw_ns(object):
         # check output
         if not is_valid_file(self.bw, is_valid_bigwig):
             log.error('Bam2bw() failed, file failed: {}'.format(self.bw))
+        return self.bw
 
 
 def get_args():

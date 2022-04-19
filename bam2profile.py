@@ -13,7 +13,7 @@ import argparse
 import shutil
 
 from utils import (
-    make_config, update_obj, load_yaml, dump_yaml, file_abspath, file_prefix,
+    make_config, update_obj, file_abspath, file_prefix, symlink_file,
     fix_label, fix_bw, is_valid_bam, is_valid_bigwig, is_valid_bed, is_valid_file,
     log, load_matrix_header
 )
@@ -53,11 +53,14 @@ class Bam2profile(object):
             self.region_list = list(map(file_abspath, self.region_list))
         else:
             raise ValueError('illegal, region_list={}'.format(
-                self.region_list))
+                self.region_list
+            ))
         # prefix
         if not isinstance(self.out_prefix, str):
-            raise ValueError('out_prefix, expect str, got {}'.format(
-                type(self.out_prefix).__name__))
+            self.out_prefix = 'metplot'
+            log.warning('out_prefix illegal, use "metaplot"')
+        # perGroup
+        self.perGroup = True # force
         # labels        
         self.samplesLabel = fix_label(self.bam_list, self.samplesLabel)
         self.regionsLabel = fix_label(self.region_list, self.regionsLabel)
@@ -116,68 +119,107 @@ class Bam2profile(object):
                 os.makedirs(d)   
         
 
-    def run(self):
-        # 1. bam to matrix
+    def bam2profile_ns(self):
+        """
+        strand-specific: False
+        """
+        # 1. bam to bw
         args1 = self.__dict__.copy()
-        r1 = Bam2matrix(**args1)
-        r1.run()
+        args1.update({
+            'bam': self.bam_list,
+            'out_dir': self.bw_dir,
+            'out_prefix': None, # update for bw files
+        })
+        r1 = Bam2bw(**args1)
+        bw_list = r1.run()
         
-        # 2. matrix to profile
-        if self.strand_specific:
-            # sens
-            args2 = self.__dict__.copy()
-            args2.update({
-                'matrix': r1.matrix_sens,
-                'out_dir': self.profile_dir,
-                'out_prefix': self.out_prefix+'_sens',
-                'perGroup': True,
-            })
-            print('!A-3', args2['colors'])
-            r2 = Matrix2profile(**args2)
-            r2.run()
-            
-            # anti
-            args3 = self.__dict__.copy()
-            args3.update({
-                'matrix': r1.matrix_anti,
-                'out_dir': self.profile_dir,
-                'out_prefix': self.out_prefix+'_anti',
-                'perGroup': True,
-            })
-            r3 = Matrix2profile(**args3)
-            r3.run()
-            
-            # output
-            p = (r2.profile_file, r3.profile_file)
-            
-            # 3. copy files
-            if not os.path.exists(self.profile_file_sens) or self.overwrite:
-                shutil.copy(r2.profile_file, self.profile_file_sens)
-            if not os.path.exists(self.profile_file_anti) or self.overwrite:
-                shutil.copy(r3.profile_file, self.profile_file_anti)
-        else:
-            args2 = self.__dict__.copy()
-            args2.update({
-                'matrix': r1.matrix,
-                'out_dir': self.profile_dir,
-                'out_prefix': self.out_prefix,
-            })
-            r2 = Matrix2profile(**args2)
-            r2.run()
-            p = r2.profile_file
-            
-            # 3. copy files
-            if not os.path.exists(self.profile_file) or self.overwrite:
-                shutil.copy(r2.profile_file, self.profile_file)
-        #output
-        return p
+        # 2. bw to matrix
+        args2 = self.__dict__.copy()
+        args2.update({
+            'bw_list': bw_list,
+            'out_dir': self.matrix_dir,
+        })
+        r2 = Bw2matrix(**args2)
+        r2.run()
+        
+        # 3. matrix to profile
+        args3 = self.__dict__.copy()
+        args3.update({
+            'matrix': r2.matrix,
+            'out_dir': self.profile_dir,
+            'out_prefix': self.out_prefix,
+        })
+        r3 = Matrix2profile(**args3)
+        r3.run()
 
-                
+        # 4. copy files
+        symlink_file(r3.profile_file, self.profile_file)        
+        return self.profile_file
+        
+        
+    def bam2profile_ss(self):
+        """
+        strand-specific: True
+        """
+        # 1. bam to bw
+        args1 = self.__dict__.copy()
+        args1.update({
+            'bam': self.bam_list,
+            'out_dir': self.bw_dir,
+            'out_prefix': None, # update for bw files
+        })
+        r1 = Bam2bw(**args1)
+        bw_list = r1.run()
+        bw_fwd_list = [i[0] for i in bw_list]
+        bw_rev_list = [i[1] for i in bw_list]
+
+        # 2. bw to matrix
+        args2 = self.__dict__.copy()
+        args2.update({
+            'bw_list': None,
+            'bw_fwd_list': bw_fwd_list,
+            'bw_rev_list': bw_rev_list,
+            'out_dir': self.matrix_dir,
+        })
+        r2 = Bw2matrix(**args2)
+        r2.run()
+        
+        # 3. matrix to profile
+        ## sens
+        args3 = self.__dict__.copy()
+        args3.update({
+            'matrix': r2.matrix_sens,
+            'out_dir': self.profile_dir,
+            'out_prefix': self.out_prefix+'_sens',
+        })
+        r3 = Matrix2profile(**args3)
+        r3.run()
+        ## anti
+        args4 = self.__dict__.copy()
+        args4.update({
+            'matrix': r2.matrix_anti,
+            'out_dir': self.profile_dir,
+            'out_prefix': self.out_prefix+'_anti',
+        })
+        r4 = Matrix2profile(**args4)
+        r4.run()
+        
+        # 4. copy files
+        symlink_file(r3.profile_file_sens, self.profile_file_sens)
+        symlink_file(r3.profile_file_anti, self.profile_file_anti)        
+        return [self.profile_file_sens, self.profile_file_anti]
+        
+
+    def run(self):
+        fun = self.bam2profile_ss if self.strand_specific else self.bam2profile_ns
+        return fun()
+
 
 def get_args():
     example = ' '.join([
+        'Example: \n',
         '$ python bam2profile.py', 
-        '-b f1.bam f2.bam -r g1.bed g2.bed -o out_dir --out-prefix metaplot', 
+        '-b f1.bam f2.bam -r g1.bed -o out_dir --out-prefix metaplot', 
         '--matrix-type scale-regions -u 2000 -d 2000 -m 2000 --binSize 100',
         '--blackListFileName bl.bed', 
         '--samplesLabel f1 f2 --regionsLabel g1 g2',
@@ -195,16 +237,28 @@ def get_args():
         help='directory to save files')
     parser.add_argument('--out-prefix', dest='out_prefix', default='bw2matrix',
         help='prefix for output files, default: [bw2matrix]')
-    parser.add_argument('--strand-specific', dest='strand_specific', 
-        action='store_true', help='for strand-specific anslysis')
+    
     parser.add_argument('-t', '--matrix-type', dest='matrix_type', 
         default='scale-regions', choices=['scale-regions', 'reference-point'],
-        help='choose the matrix type, default: [scale-regions]')     
+        help='choose the matrix type, default: [scale-regions]')
+    parser.add_argument('-ss','--strand-specific', dest='strand_specific', 
+        action='store_true', help='Strand-specific, dUTP library')
+    parser.add_argument('-s', '--scaleFactor', dest='scaleFactor', type=float, 
+        default=1.0, help='scale factor for the bam, default: [1.0]') 
+    parser.add_argument('-n', '--normalizeUsing', default='None', 
+        choices=['RPKM', 'CPM', 'BPM', 'RPGC', 'None'],
+        help='Use one of the method to normalize reads, default: ["None"]')
+    parser.add_argument('-es', '--effsize', dest='effectiveGenomeSize', type=int,
+        default=None,
+        help='effective genome size, if not specified, parse from bam header')
+    parser.add_argument('-g', '--genome', default=None,
+        help='The reference genome of bam files, default [None]')
+    
     parser.add_argument('--samplesLabel', nargs='+', default=None,
         help='labels for samples in plot, defautl: [None] auto')
     parser.add_argument('--regionsLabel', nargs='+', default=None,
         help='labels for regions in plot, defautl: [None] auto')
-    parser.add_argument('--binSize', type=int, default=50,
+    parser.add_argument('-bs', '--binSize', dest='binSize', type=int, default=50,
         help='the bin_size, default [50]')
     parser.add_argument('-u', '--beforeRegionStartLength', type=int, default=500,
         help='Distance upstream of TSS, default: [500]')

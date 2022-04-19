@@ -69,8 +69,8 @@ class Bw2profile(object):
             raise ValueError('bw_list, bw_fwd_list, bw_rev_list required:')
         # prefix
         if not isinstance(self.out_prefix, str):
-            raise ValueError('out_prefix, expect str, got {}'.format(
-                type(self.out_prefix).__name__))
+            self.out_prefix = 'metaplot'
+            log.error('out_prefix failed, use "metaplot" instead')
         # labels        
         # self.samplesLabel = fix_label(self.bam_list, self.samplesLabel)
         self.regionsLabel = fix_label(self.region_list, self.regionsLabel)
@@ -166,28 +166,6 @@ class Bw2profile(object):
             else:
                 log.info('run subset_matrix: {}'.format(o))
                 os.system(cmd) # try-except ?
-
-  
-    def rbind_matrix(self, x, o):
-        """
-        Example:
-        computeMatrixOperations rbind -m input1.mat.gz input2.mat.gz -o output.mat.gz
-        """
-        cmd = ' '.join([
-            '{} rbind'.format(shutil.which('computeMatrixOperations')),
-            '-m {}'.format(' '.join(x)),
-            '-o {}'.format(o),
-        ])
-        # save command
-        cmd_txt = os.path.join(os.path.dirname(o), file_prefix(o)+'.rbind_matrix.sh')
-        with open(cmd_txt, 'wt') as w:
-            w.write(cmd+'\n')
-        # run
-        if os.path.exists(o) and not self.overwrite:
-            log.info('rbind_matrix() skipped, file exists: {}'.format(o))
-        else:
-            log.info('run rbind_matrix: {}'.format(o))
-            os.system(cmd)
 
     
     def bw2matrix_ss(self):

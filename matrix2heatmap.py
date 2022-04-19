@@ -74,6 +74,13 @@ class Matrix2heatmap(object):
             self.is_valid_rl = len(d_regions_label) == len(self.regionsLabel)
         else:
             self.is_valid_rl = False
+        # colors
+        if isinstance(self.colors, str):
+            self.cc = self.colors
+        elif isinstance(self.colors, list):
+            self.cc = ','.join(self.colors)
+        else:
+            self.cc = None
 
 
     def init_files(self):
@@ -103,9 +110,9 @@ class Matrix2heatmap(object):
             '--dpi {}'.format(self.dpi),
         ])
         if self.is_valid_sl:
-            args_basic += ' --samplesLabel {}'.format(' '.join(self.samplesLabel)),
+            args_basic += ' --samplesLabel {}'.format(' '.join(self.samplesLabel))
         if self.is_valid_rl:
-            args_basic += ' --regionsLabel {}'.format(' '.join(self.regionsLabel)),
+            args_basic += ' --regionsLabel {}'.format(' '.join(self.regionsLabel))
         # type
         if self.is_refpoint:
             args_type = '--refPointLabel {}'.format(self.refPointLabel)
@@ -116,14 +123,12 @@ class Matrix2heatmap(object):
             ])
         # extra
         args_extra = '--perGroup' if self.perGroup else ''
-        if isinstance(self.colors, str):
-            cc = self.colors
-        elif isinstance(self.colors, list):
-            cc = ' '.join(self.colors)
-        else:
-            cc = None
-        if cc is not None:
-            args_extra += ' --colors {}'.format(cc)
+        if isinstance(self.plotType, str):
+            args_extra += ' --plotType {}'.format(self.plotType)
+        if isinstance(self.averageType, str):
+            args_extra += ' --averageType {}'.format(self.averageType)
+        if self.cc is not None:
+            args_extra += ' --colorList {}'.format(self.cc)
         if isinstance(self.yMin, float):
             args_extra += ' --yMin {}'.format(self.yMin)
         if isinstance(self.yMax, float):
@@ -131,11 +136,11 @@ class Matrix2heatmap(object):
         if isinstance(self.zMin , float):
             args_extra += ' --zMin {}'.format(self.zMin)
         if isinstance(self.zMax, float):
-            args_extra += ' --zMax {}'.format(self.zMax)
-        # log
-        args_extra += ' 1> {}'.format(self.stdout)
-        args_extra += ' 2> {}'.format(self.stderr)
-        # cmd
+            args_extra += ' --zMax {}'.format(self.zMax)        
+        args_extra += ' '.join([
+            ' 1> {}'.format(self.stdout),
+            ' 2> {}'.format(self.stderr),
+        ])
         return ' '.join([args_basic, args_type, args_extra])
 
 
@@ -150,24 +155,29 @@ class Matrix2heatmap(object):
         else:
             log.info('run plotHeatmap: {}'.format(self.matrix))
             os.system(self.cmd)
+        # check output
+        if not os.path.exists(self.heatmap_file):
+            log.error('plotHeatmap() failed, file not found: {}'.format(self.heatmap_file))
 
 
 def get_args():
     example = ' '.join([
-        '$ plotHeatmap',
-        '-m input.mat -o out.png',
-        '--samplesLabel A B C --regionsLabel gene1 gene2',
-        '--colors black lightblue --yMin 0 --yMax 0.4',
-        '--perGroup',
+        'Example: \n',
+        '$ python matrix2heatmap.py',
+        '-m aaa/bw2matrix/bw2matrix_sens.mat.gz -o aaa',
+        '-op metaplot --plotType se ',
+        '--colors black red -p 2 -rl genes',
     ])
-    parser = argparse.ArgumentParser(prog='bw2matrix.py',
-                                     description='bw2matrix',
+    parser = argparse.ArgumentParser(prog='matrix2heatmap.py',
+                                     description='matrix2heatmap',
                                      epilog=example,
                                      formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-m', dest='matrix', required=True,
         help='matrix file, by computeMatrix ')
-    parser.add_argument('-o', dest='out', required=True,
-        help='filename of output')    
+    parser.add_argument('-o', dest='out_dir', required=False,
+        help='directory to save bigWig file')
+    parser.add_argument('-op', '--out-prefix', dest='out_prefix', default='metaplot',
+        help='prefix for output files, default: [metaplot]')
     parser.add_argument('--averageType', default='mean',
         choices=['mean', 'median', 'max', 'min', 'sum', 'region_length'],
         help='Which method should be used for sorting, default: [mean]')
@@ -176,13 +186,13 @@ def get_args():
         help='type of the plot, default: [lines]')
     parser.add_argument('--colors', nargs='+', default=None,
         help='colors for the lines, default: [None] auto')
-    parser.add_argument('--regionsLabel', nargs='+', default=None,
+    parser.add_argument('-rl', '--regionsLabel', nargs='+', default=None,
         help='labels for regions in plot, defautl: [None] auto')
-    parser.add_argument('--samplesLabel', nargs='+', default=None,
+    parser.add_argument('-sl', '--samplesLabel', nargs='+', default=None,
         help='labels for samples in plot, default: [None] auto')
-    parser.add_argument('--startLabel', default='TSS',
+    parser.add_argument('-st', '--startLabel', default='TSS',
         help='start label, default: [TSS]')
-    parser.add_argument('--endLabel', default='TES',
+    parser.add_argument('-ed', '--endLabel', default='TES',
         help='end label, default: [TES]')
     parser.add_argument('--refPointLabel', default='TSS',
         help='refPointLabel label, default: [TSS]')
@@ -205,10 +215,10 @@ def get_args():
 
 def main():
     args = vars(get_args().parse_args())
-    args.update({
-        'out_dir': os.path.dirname(args['out']),
-        'out_prefix': file_prefix(args['out']),
-    })
+#     args.update({
+#         'out_dir': os.path.dirname(args['out']),
+#         'out_prefix': file_prefix(args['out']),
+#     })
     Matrix2heatmap(**args).run()
 
     
