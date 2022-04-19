@@ -95,7 +95,7 @@ def make_config(**kwargs):
         'bw_rev_list': None,
         'region_list': None,
         'out_dir': None,
-        'out_prefix': None,
+        'out_prefix': 'metaplot',
         'samplesLabel': None, # auto
         'regionsLabel': None, # auto
         'colorList': None, # auto
@@ -138,6 +138,7 @@ def make_config(**kwargs):
         'perGroup': False,
         'colors': None,
         'extendReads': False,
+        'matrix': None,
     }
     args_init.update(kwargs)
     return args_init
@@ -464,6 +465,18 @@ def is_valid_bed(x):
         x_ext = os.path.splitext(x)[1]
         out2 = x_ext.lower() in ['.bed', '.bed6', '.bed12', '.narrowpeak']
         out = out1 and out2
+    return out
+
+
+def is_valid_matrix(x):
+    """
+    Check if x is valid matrix file
+    first line, contains json str
+    """
+    out = False
+    if isinstance(x, str):
+        d = load_matrix_header(x)
+        out = isinstance(d, dict)
     return out
 
 
