@@ -18,15 +18,14 @@ $ plotProfile \
 """
 
 import os
-# import sys
 import pathlib
 import argparse
 import shutil
 from matplotlib import colors
 
 from utils import (
-    make_config, update_obj, load_yaml, dump_yaml, file_abspath, file_prefix,
-    fix_label, fix_bw, is_valid_bam, is_valid_bigwig, is_valid_bed, log,
+    make_config, update_obj, dump_yaml, file_abspath, file_prefix,
+    fix_label, is_valid_bed, is_valid_file, log,
     load_matrix_header
 )
 
@@ -169,26 +168,23 @@ def get_args():
         '-op metaplot --plotType se ',
         '--colors black red -p 2 -rl genes',
     ])
-    parser = argparse.ArgumentParser(prog='bw2matrix.py',
-                                     description='bw2matrix',
-                                     epilog=example,
-                                     formatter_class=argparse.RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(
+        prog='bw2matrix.py', description='bw2matrix', epilog=example,
+        formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-m', dest='matrix', required=True,
         help='matrix file, by computeMatrix ')
     parser.add_argument('-o', dest='out_dir', required=False,
         help='directory to save bigWig file')
     parser.add_argument('-op', '--out-prefix', dest='out_prefix', default='metaplot',
         help='prefix for output files, default: [metaplot]')
-#     parser.add_argument('-o', dest='out', required=True,
-#         help='filename of output')
-    parser.add_argument('--averageType', default='mean',
-        choices=['mean', 'median', 'max', 'min', 'sum', 'region_length'],
-        help='Which method should be used for sorting, default: [mean]')
     parser.add_argument('--plotType', default='lines',
         choices=['lines', 'fill', 'se', 'std', 'overlapped_lines', 'heatmap'],
         help='type of the plot, default: [lines]')
     parser.add_argument('--colors', nargs='+', default=None,
         help='colors for the lines, default: [None] auto')
+    parser.add_argument('--averageType', default='mean',
+        choices=['mean', 'median', 'max', 'min', 'sum', 'region_length'],
+        help='Which method should be used for sorting, default: [mean]')
     parser.add_argument('-rl', '--regionsLabel', nargs='+', default=None,
         help='labels for regions in plot, defautl: [None] auto')
     parser.add_argument('-sl', '--samplesLabel', nargs='+', default=None,
@@ -214,10 +210,6 @@ def get_args():
 
 def main():
     args = vars(get_args().parse_args())
-#     args.update({
-#         'out_dir': os.path.dirname(args['out']),
-#         'out_prefix': file_prefix(args['out']),
-#     })
     Matrix2profile(**args).run()
 
     
