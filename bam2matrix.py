@@ -210,11 +210,12 @@ class Bam2matrix(object):
 
 def get_args():
     example = ' '.join([
+        'Example: \n',
         '$ python bam2matrix.py',
-        '-b f1.bam f2.bam -r g1.bed g2.bed -o out_dir --out-prefix metaplot',
-        '--matrix-type scale-regions -u 2000 -d 2000 -m 2000 --binSize 100',
+        '-b f1.bam f2.bam -r g1.bed -o out_dir -op metaplot',
+        '-t scale-regions -u 2000 -d 2000 -m 2000 --binSize 100',
         '--blackListFileName bl.bed',
-        '--samplesLabel f1 f2 --regionsLabel g1 g2',
+        '-sl f1 f2 -rl g1',
         '--startLabel TSS --endLabel TES -p 8',
     ])
     parser = argparse.ArgumentParser(
@@ -223,7 +224,7 @@ def get_args():
     parser.add_argument('-b', dest='bam_list', nargs='+', required=True,
         help='bam files')
     parser.add_argument('-r', dest='region_list', nargs='+', required=True,
-        help='region files')
+        help='region files, BED format')
     parser.add_argument('-o', dest='out_dir', required=True,
         help='directory to output file')
     parser.add_argument('-op', '--out-prefix', dest='out_prefix', default='bam2matrix',
@@ -235,6 +236,9 @@ def get_args():
         help='choose the matrix type, default: [scale-regions]')
     parser.add_argument('-bs', '--binSize', dest='binSize', type=int, default=50,
         help='the bin_size, default [50]')
+    parser.add_argument('-n', '--normalizeUsing', default='None', 
+        choices=['RPKM', 'CPM', 'BPM', 'RPGC', 'None'],
+        help='Use one of the method to normalize reads, default: ["None"]')
     parser.add_argument('-g', '--genome', default=None,
         help='The reference genome of bam files, default [None]')
     parser.add_argument('-es', '--effsize', dest='effectiveGenomeSize', type=int,
