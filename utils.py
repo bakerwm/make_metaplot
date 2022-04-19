@@ -137,6 +137,7 @@ def make_config(**kwargs):
         'strand_specific': False, # for bigWig files, matrix, ...
         'perGroup': False,
         'colors': None,
+        'extendReads': False,
     }
     args_init.update(kwargs)
     return args_init

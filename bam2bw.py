@@ -16,7 +16,7 @@ fwd: fwd / (fwd + rev)
 rev: rev / (fwd + rev)
 
 3. code structure
-Bam2bw(bam=n) 
+Bam2bw(bam=n)
   |-(ss)- Bam2bw_ss(bam=1)
   |          |- (forward)- Bam2bw_ns(bam=1)
   |          |- (reverse)- Bamwbw_ns(bam=1)
@@ -42,7 +42,7 @@ import pysam
 from multiprocessing import Pool
 from utils import (
     make_config, update_obj, dump_yaml, file_abspath, file_prefix, symlink_file,
-    fix_label, fix_bw, is_valid_file, is_valid_bam, is_valid_bigwig, 
+    fix_label, fix_bw, is_valid_file, is_valid_bam, is_valid_bigwig,
     is_valid_bed, log, init_cpu
 )
 
@@ -50,7 +50,7 @@ from utils import (
 class Bam2bw(object):
     """
     Convert multiple BAM to bigWig, strand-specific, normalizeUsing CPM
-    required: 
+    required:
     - bam
     - out_dir
     - out_prefix
@@ -59,8 +59,8 @@ class Bam2bw(object):
         c = make_config(**kwargs)
         self = update_obj(self, c, force=True)
         self.init_args()
-        
-        
+
+
     def init_args(self):
         if isinstance(self.bam, str):
             self.bam = [self.bam] # to list
@@ -74,8 +74,8 @@ class Bam2bw(object):
         self.numberOfProcessors, self.parallel_jobs = init_cpu(
             self.numberOfProcessors, self.parallel_jobs
         )
-        
-    
+
+
     def bam2bw(self, x):
         args = self.__dict__.copy()
         i = self.bam.index(x) # get out_prefix
@@ -83,27 +83,28 @@ class Bam2bw(object):
             'bam': x,
             'out_prefix': self.out_prefix[i],
         })
-        fun = Bam2bw_ss if self.strand_specific else Bam2bw_ns        
+        fun = Bam2bw_ss if self.strand_specific else Bam2bw_ns
         r = fun(**args)
         return r.run()
-    
-    
+
+
     def run(self):
         # see help for run parallel in python:
         # https://www.machinelearningplus.com/python/parallel-processing-python
         with Pool(processes=self.parallel_jobs) as pool:
-            # pool.map(self.bam2bw, self.bam) # single args
-            pool.starmap(self.bam2bw, [[i] for i in self.bam]) # multi args
+            out = pool.map(self.bam2bw, self.bam) # single args
+            # pool.starmap(self.bam2bw, [[i] for i in self.bam]) # multi args
         # return [self.bam2bw(i) for i in self.bam]
+        return out
 
 
 class Bam2bw_ss(object):
     """
     Convert BAM to bigWig, strand-specific, normalizeUsing CPM
-    
+
     $ bamCoverage -b in.bam -o out.bw --binSize 50 \
       --filterRNAstrand reverse/forward
-      
+
     default criteria for dUTP library:
     -–filterRNAstrand=forward keeps minus-strand reads, -f 16
     -–filterRNAstrand=reverse keeps plus-strand reads, -F 16
@@ -113,7 +114,7 @@ class Bam2bw_ss(object):
         self = update_obj(self, c, force=True)
         self.init_args()
         self.init_files()
- 
+
 
     def init_args(self):
         if isinstance(self.bam, str):
@@ -163,7 +164,7 @@ class Bam2bw_ss(object):
             # name,strand,total,count,scale
             with open(c2_file) as r2:
                 line = next(r2).strip().split(',') # name,strand,count
-                s2 = float(line[-1].strip())          
+                s2 = float(line[-1].strip())
         else:
             # (forward) -–filterRNAstrand=forward keeps minus-strand reads, -f 16
             c1 = pysam.view('-c', '-f', '16', '-F', '4', '-@', '8', x) # fwd
@@ -185,7 +186,7 @@ class Bam2bw_ss(object):
         # out: scale
         return (s1, s2) # fwd, rev
 
-    
+
     def bam2bw_single(self, strand='forward'):
         # get the scalefactor
         c1, c2 = self.count_bam_ss(self.bam)
@@ -200,19 +201,18 @@ class Bam2bw_ss(object):
             'out_dir': os.path.join(self.out_dir, self.out_prefix),
             'out_prefix': self.out_prefix+sx,
             'filterRNAstrand': strand,
-            'normalizeUsing': 'CPM', 
+            'normalizeUsing': 'CPM',
             'scaleFactor': sf # scaleFactor
         })
         r = Bam2bw_ns(**args)
         r.run()
-        
+
         # copy bw to self.project_dir ?!
         dest_bw = self.bw_fwd if strand == 'forward' else self.bw_rev
         symlink_file(r.bw, dest_bw)
-        
         return r.bw
 
-    
+
     def run(self):
         return [self.bam2bw_single(i) for i in ['forward', 'reverse']]
 
@@ -337,7 +337,7 @@ class Bam2bw_ns(object):
         if hasattr(self, 'filterRNAstrand'):
             if self.filterRNAstrand in ['forward', 'reverse']:
                 args_norm += ' --filterRNAstrand {}'.format(self.filterRNAstrand)
-        # binSize: 
+        # binSize:
         if hasattr(self, 'binSize'):
             if isinstance(self.binSize, int):
                 args_norm += ' --binSize {}'.format(self.binSize)
@@ -351,7 +351,7 @@ class Bam2bw_ns(object):
             '1> {}'.format(self.stdout),
             '2> {}'.format(self.stderr)
         ])
-        return ' '.join([args_basic,  args_norm, args_extra])
+        return ' '.join([args_basic, args_norm, args_extra])
 
 
     def run(self):
@@ -379,10 +379,9 @@ def get_args():
         '--blackListFileName b.bed',
         '--skkipNAs --extendReads --centerReads -p 8',
     ])
-    parser = argparse.ArgumentParser(prog='bam2bw.py',
-                                     description='bam2bw',
-                                     epilog=example,
-                                     formatter_class=argparse.RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(
+        prog='bam2bw.py', description='bam2bw', epilog=example,
+        formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-b', dest='bam', nargs='+', required=True,
         help='bam files')
     parser.add_argument('-o', dest='out_dir', required=True,
@@ -391,23 +390,23 @@ def get_args():
         help='the bin_size, default [50]')
     parser.add_argument('-g', '--genome', default=None,
         help='The reference genome of bam files, default [None]')
-    parser.add_argument('-ss','--strand-specific', dest='strand_specific', 
+    parser.add_argument('-ss','--strand-specific', dest='strand_specific',
         action='store_true', help='Strand-specific, dUTP library')
     parser.add_argument('-es', '--effsize', dest='effectiveGenomeSize', type=int,
         default=None,
         help='effective genome size, if not specified, parse from bam header')
-    parser.add_argument('-s', '--scaleFactor', dest='scaleFactor', type=float, 
+    parser.add_argument('-s', '--scaleFactor', dest='scaleFactor', type=float,
         default=1.0,
-        help='scale factor for the bam, default: [1.0]') 
-    parser.add_argument('-n', '--normalizeUsing', default='None', 
+        help='scale factor for the bam, default: [1.0]')
+    parser.add_argument('-n', '--normalizeUsing', default='None',
         choices=['RPKM', 'CPM', 'BPM', 'RPGC', 'None'],
         help='Use one of the method to normalize reads, default: [None]')
     parser.add_argument('-bl', '--blackListFileName', dest='blackListFileName',
         default=None, help='blacklist file, default: [None]')
-    parser.add_argument('-p', dest='numberOfProcessors', type=int, default=4, 
+    parser.add_argument('-p', dest='numberOfProcessors', type=int, default=4,
         help='number of processors, default: [4]')
     parser.add_argument('--extendReads', action='store_true',
-        help='extend PE reads to fragment size') 
+        help='extend PE reads to fragment size')
     parser.add_argument('--centerReads', action='store_true',
         help='reads are centered with respect to the fragment length')
     parser.add_argument('-O', '--overwrite', dest='overlap', action='store_true',
@@ -419,7 +418,7 @@ def main():
     args = vars(get_args().parse_args())
     Bam2bw(**args).run()
 
-    
+
 if __name__ == '__main__':
     main()
 

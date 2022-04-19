@@ -270,6 +270,7 @@ class Bw2matrix_ns(object):
         # check output
         if not os.path.exists(self.matrix):
             log.error('Bw2matrix() failed: {}'.format(self.stderr))
+        return self.matrix
 
 
 class Bw2matrix_ss(object):
