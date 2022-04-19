@@ -139,12 +139,12 @@ class Bam2profile(object):
             'out_dir': self.matrix_dir,
         })
         r2 = Bw2matrix(**args2)
-        r2.run()
+        matrix = r2.run() # str
         
         # 3. matrix to profile
         args3 = self.__dict__.copy()
         args3.update({
-            'matrix': r2.matrix,
+            'matrix': matrix,
             'out_dir': self.profile_dir,
             'out_prefix': self.out_prefix,
         })
@@ -169,7 +169,6 @@ class Bam2profile(object):
         })
         r1 = Bam2bw(**args1)
         bw_list = r1.run()
-
 
         # 2. bw to matrix
         args2 = self.__dict__.copy()
@@ -237,6 +236,14 @@ def get_args():
         help='prefix for output files, default: [metaplot]')
     parser.add_argument('-ss','--strand-specific', dest='strand_specific',
         action='store_true', help='Strand-specific, dUTP library')
+    parser.add_argument('--plotType', default='lines',
+        choices=['lines', 'fill', 'se', 'std', 'overlapped_lines', 'heatmap'],
+        help='type of the plot, default: [lines]')
+    parser.add_argument('--colors', nargs='+', default=None,
+        help='colors for the lines, default: [None] auto')
+    parser.add_argument('--averageType', default='mean',
+        choices=['mean', 'median', 'max', 'min', 'sum', 'region_length'],
+        help='Which method should be used for sorting, default: [mean]')
     parser.add_argument('-t', '--matrix-type', dest='matrix_type',
         default='scale-regions', choices=['scale-regions', 'reference-point'],
         help='choose the matrix type, default: [scale-regions]')

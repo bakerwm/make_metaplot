@@ -470,7 +470,7 @@ def get_args():
         help='region files')
     parser.add_argument('-o', dest='out_dir', required=True,
         help='directory to save bigWig file')
-    parser.add_argument('--out-prefix', dest='out_prefix', default='bw2matrix',
+    parser.add_argument('-op', '--out-prefix', dest='out_prefix', default='bw2matrix',
         help='prefix for output files, default: [bw2matrix]')
     parser.add_argument('-t', '--matrix-type', dest='matrix_type',
         default='scale-regions', choices=['scales-regions', 'reference-point'],
