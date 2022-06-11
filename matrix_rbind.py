@@ -1,50 +1,76 @@
 #!/usr/bin/env python
-
 """
-Bind multiple matrix, by rows
+!!! ATTENTION !!!
+This script NOT working for general `rbind` matrix.
+This script was designed to merge two matrix of sens + anti stranded.
+sample_labels contain: '_fwd', '_rev' suffix,
+group_labels contain: '_fwd.bed', '_rev.bed' suffix
 
-- merge group names
-- keep group names
+Requirements:
+1. same sample labels
+2. same group labels
+
+Why?
+merge sense and antisense matrix, into one single matrix.
+
+How?
+1. update labels (sample/group)
+2. bind rows
+3. update group boundaries (for group)
+
+
+Bind multiple matrix, by rows
+row: groups (regions)
+column: samples (signal)
+
+update:
+- sample_labels
+- group_labels
+- group_boundaries
 
 Usage:
 $ python matrix_rbind -m m1.gz m2.gz -o out.gz
 """
 
+from multiprocessing.sharedctypes import Value
 import os
 import argparse
 import json
 from xopen import xopen
-from utils import load_matrix_header, update_obj, log
+from utils import load_matrix, update_obj, log
 from difflib import SequenceMatcher
 from functools import reduce
 
 ## h1
 # '{"upstream": [2000], "downstream": [2000], "body": [2000], "bin size": [100], "ref point": [null],
 # "verbose": false, "bin avg type": "mean", "missing data as zero": false, "min threshold": null,
-# "max threshold": null, "scale": 1, "skip zeros": false, "nan after end": false, "proc number": 24, 
-# "sort regions": "keep", "sort using": "mean", "unscaled 5 prime": [0], "unscaled 3 prime": [0], 
+# "max threshold": null, "scale": 1, "skip zeros": false, "nan after end": false, "proc number": 24,
+# "sort regions": "keep", "sort using": "mean", "unscaled 5 prime": [0], "unscaled 3 prime": [0],
 # "group_labels": ["genes"], "group_boundaries": [0, 26799], "sample_labels": ["ChrRNA_mESC_WT.r1_fwd"],
 # "sample_boundaries": [0, 60]}'
 
 ## h2
-# '{"upstream": [2000], "downstream": [2000], "body": [2000], "bin size": [100], "ref point": [null], 
-# "verbose": false, "bin avg type": "mean", "missing data as zero": false, "min threshold": null, 
+# '{"upstream": [2000], "downstream": [2000], "body": [2000], "bin size": [100], "ref point": [null],
+# "verbose": false, "bin avg type": "mean", "missing data as zero": false, "min threshold": null,
 # "max threshold": null, "scale": 1, "skip zeros": false, "nan after end": false, "proc number": 24,
 # "sort regions": "keep", "sort using": "mean", "unscaled 5 prime": [0], "unscaled 3 prime": [0],
-# "group_labels": ["genes"], "group_boundaries": [0, 26916], "sample_labels": ["ChrRNA_mESC_WT.r1_rev"], 
+# "group_labels": ["genes"], "group_boundaries": [0, 26916], "sample_labels": ["ChrRNA_mESC_WT.r1_rev"],
 # "sample_boundaries": [0, 60]}'
 
 # fix groups
 class Matrix_rbind(object):
     """
+    row: groups (regions)
+    column: samples (signal)
     merge mulitple matrix, by rows
     support only 1 group, n samples
     """
     def __init__(self, **kwargs):
         self = update_obj(self, kwargs, force=True)
         self.init_args()
-        
-        
+        self.headers = self.load_matrix2(self.m, header_only=True)
+
+
     def init_args(self):
         args = {
             'm': None,
@@ -66,130 +92,126 @@ class Matrix_rbind(object):
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
 
-        
-    def fix_group_b(self, x):
+
+    def load_matrix2(self, x, header_only=True):
         """
-        group boundaries
-        
-        Parameters
-        ----------
-        x : list of header
-        
-        merge groups boundaries
-        input: [0, 100], [0, 100], ...
-        output: [0, 200]
+        load header/body from multiple matrix files
+        Parameters:
+        -----------
+        x : list
+            list of matrix files
+        header_only: bool
+            load header only
         """
-        a = sum([min(i.get('group_boundaries')) for i in x])
-        b = sum([max(i.get('group_boundaries')) for i in x])
-        return [a, b]
+        y = [load_matrix(i, header_only) for i in x]
+        if any([len(i) == 0 for i in y]):
+            s = ['{} : {}'.format(i, j) for i,j in zip([len(i) > 0 for i in y], self.m)]
+            print('\n'.join(s))
+            raise ValueError('illegal matrix file(s) detected')
+        return y # list of dict
 
 
-    def fix_group_labels(self, x):
+    def check_labels(self):
         """
-        group labels
-        
-        Parameters
-        ----------
-        x : list of header
-        
-        merge all group labels
-        input: ['g1'] ['g1']
-        output: ['g1']
+        Check sample/group labels
         """
-        a = list(set(i.get('group_labels')[0] for i in x))
-        if len(a) > 1:
-            log.error('more than 1 groups found, choose: {}'.format(a[0]))
-            a = a[:1]
-        return a
-    
-    
-    def fix_sample_labels(self, x):
+        # 1. sample_labels
+        s1 = [i.get('sample_labels', []) for i in self.headers]
+        s1x = self.update_labels(s1)
+        k1 = self.is_valid_labels(s1x)
+        # 2. group labels
+        s2 = [i.get('group_labels', []) for i in self.headers]
+        s2x = self.update_labels(s2)
+        k2 = self.is_valid_labels(s2x)
+        # output
+        if not all([k1, k2]):
+            raise ValueError('group/sample labels not valid')
+        return (s1x[0], s2x[0])
+
+
+    def is_valid_labels(self, x):
         """
-        sample labels
-        
-        Parameters
-        ----------
-        x : list of header
-        
-        merge samples labels, trim '_fwd', '_rev'
-        input: ChrRNA_mESC_WT.r1_fwd, ChrRNA_mESC_WT.r1_rev
-        output: ChrRNA_mESC_WT.r1
+        check lables
+        - identical in all (length, content)
         """
-        g1 = [i.get('sample_labels') for i in x]
-        g2 = [[j[i] for j in g1] for i in range(len(g1[0]))]
-        s = [reduce(self.find_lcs, i) for i in g2]
-        # trim suffix
-        return [i.rstrip('._-') for i in s]    
-    
-    
-    def find_lcs(self, s1, s2):
+        k1 = len(set([len(i) for i in x])) == 1
+        x2 = [[j[i] for j in x] for i,_ in enumerate(x[0])]
+        k2 = all([len(set(i))==1 for i in x2])
+        return k1 and k2
+
+
+    def update_labels(self, x):
         """
-        Find longest common str
+        update sample/group lables remove ('_fwd', '_rev')
+        input: [wt_fwd, mut_fwd], [wt_rev, mut_rev]
+        output: [wt, mut]
         """
-        if isinstance(s1, str) and isinstance(s2, str):
-            m = SequenceMatcher(None, s1, s2) # match
-            l = m.find_longest_match(0, len(s1), 0, len(s2))
-            out = s1[l.a:(l.a+l.size)]
-        else:
-            out = None
-        return out
-    
-    
-    def match_val(self, s1, s2):
+        # s = [i.get('sample_labels', []) for i in self.headers]
+        s = [[j.replace('_fwd', '') for j in i] for i in x]
+        s = [[j.replace('_rev', '') for j in i] for i in s]
+        return s
+
+
+    def update_group_boundaries(self):
         """
-        a and b are identical
+        update group boundaries
+        input: [0, 10, 30], [0, 5, 15]
+        output: [0, 15, 45]
         """
-        return s1 == s2
-     
-    
+        s = [i.get('group_boundaries', []) for i in self.headers]
+        return reduce(lambda a,b: [i+j for i,j in zip(a,b)], s)
+
+
+    def update_header(self):
+        """
+        update header line for final matrix file
+        - sample_labels
+        - group_boundaries
+        """
+        h = self.headers[0] # first header
+        # update labels, boundaries
+        s, g = self.check_labels()
+        gb = self.update_group_boundaries()
+        h.update({
+            'sample_labels': s,
+            'group_labels': g,
+            'group_boundaries': gb
+        })
+        # return json.dumps(h)
+        return h
+
+
     def run(self):
         if os.path.exists(self.o) and not self.overwrite:
-            log.info('matrix_rbind() skipped, file exists: {}'.format(self.o))
-        else:
-            h = [load_matrix_header(i) for i in self.m]
-            h1 = h[0] # first one
-            args = {
-                'group_labels': self.fix_group_labels(h),
-                'group_boundaries': self.fix_group_b(h),
-                'sample_labels': self.fix_sample_labels(h),
-            }
-            q = [[p.get(i) for p in h] for i,j in h1.items() if i not in args]
-            t = [reduce(self.match_val, i) for i in q]
-            if not all(t):
-                raise ValueError('parameters not matched')
-            # update header
-            h1.update(args)
-            hs = json.dumps(h1) #
-            # hs = '@'+hs # add @
-            # merge all lines
-            with xopen(self.o, 'wt') as w:
-                w.write('@'+hs+'\n') # header, new
-                for hx in self.m:
-                    with xopen(hx) as r:
-                        for line in r:
-                            if line.startswith('@'):
-                                continue
-                            w.write(line)     
+            log.info('Matrix_rbind().run() skipped, file exists: {}'.format(self.o))
+            return None
+        # update header
+        h = self.update_header()
+        hs = json.dumps(h)
+        # load matrix body, merge all
+        mx = self.load_matrix2(self.m, header_only=False) # list of dict, key=group_labels
+        with xopen(self.o, 'wt') as w:
+            # save header
+            w.write('@'+hs+'\n')
+            # save matrix body
+            for i in h.get('group_labels'):
+                for j in mx:
+                    w.write('\n'.join(j.get(i, []))+'\n')
 
 
 def get_args():
-    example = ' '.join([
-        '$ plotProfile',
-        '-m input.mat -o out.png',
-        '--samplesLabel A B C --regionsLabel gene1 gene2',
-        '--colors black lightblue --yMin 0 --yMax 0.4',
-        '--perGroup',
-    ])
-    parser = argparse.ArgumentParser(prog='bw2matrix.py',
-                                     description='bw2matrix',
-                                     epilog=example,
-                                     formatter_class=argparse.RawTextHelpFormatter)
+    example = 'python matrix_rbind.py -m sens.gz anti.gz -o merge.gz'
+    parser = argparse.ArgumentParser(
+        prog='matrix_rbind.py',
+        description='merge sens and anti matrix',
+        epilog=example,
+        formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('-m', dest='m', nargs='+', required=True,
         help='matrix files, by computeMatrix ')
     parser.add_argument('-o', dest='o', required=True,
         help='output matrix')
-    parser.add_argument('--overwrite', dest='overwrite', action='store_true',
-        help='Overwrite output file')
+    parser.add_argument('-O', '--overwrite', dest='overwrite',
+        action='store_true', help='Overwrite output file')
     return parser
 
 
@@ -197,7 +219,7 @@ def main():
     args = vars(get_args().parse_args())
     Matrix_rbind(**args).run()
 
-    
+
 if __name__ == '__main__':
     main()
 

@@ -82,7 +82,29 @@ $ computeMatrixOperations filterStrand -m reverse.mat.gz -o reverse.subset.mat.g
 $ computeMatrixOperations rbind -m forward.subset.mat.gz reverse.subset.mat.gz -o merged.mat.gz
 $ computeMatrixOperations sort -m merged.mat.gz -o sorted.mat.gz -R genes.gtf
 """
+# Bam2bw template
+def make_bam2bw_config(**kwargs):
+    # for Bam2bw
+    args_bw = {
+        'bam': None,
+        'out_dir': None,
+        'out_prefix': 'metaplot',
+        'scaleFactor': 1.0,
+        'normalizeUsing': 'None',
+        'binSize': 100,
+        'numberOfProcessors': 4,
+        'blackListFileName': None,
+        'genome': None,
+        'effectiveGenomeSize': None,
+        'overwrite': False,
+        'strand_specific': False, # for bigWig files, matrix, ...
+        'extendReads': False,
+        'centerReads': False,
+    }
+    args_bw.update(kwargs)
+    return args_bw
 
+    
 # config template
 def make_config(**kwargs):
     """
@@ -112,6 +134,7 @@ def make_config(**kwargs):
         'endLabel': 'TES',
         'matrix_type': 'scale-regions', # reference-point
         'numberOfProcessors': 4,
+        'numPlotsPerRow': 0,
         'sortRegions': 'keep',
         'sortUsing': 'mean',
         'sortUsingSamples': 1,
@@ -479,7 +502,7 @@ def is_valid_matrix(x):
         out = isinstance(d, dict)
     return out
 
-
+# deprecated
 def load_matrix_header(x):
     """
     header in matrix file (gzipped)
@@ -498,3 +521,50 @@ def load_matrix_header(x):
         print('Failed to load matrix file: {}'.format(x))
         d = None
     return d
+
+
+def load_matrix(x, header_only=False):
+    """
+    load matrix, split by group labels, remove '_fwd', '_rev'
+
+    Parameters:
+    -----------
+    x : str 
+        matrix file
+    header_only : bool
+        return the header line only, default: False
+    """
+    # read matrix file (gzipped)
+    try:
+        m = []
+        with xopen(x) as r:
+            for l in r:
+                m.append(l.strip())
+    except:
+        log.error('Could not read matrix file: {}'.format(x))
+        return None
+    if len(m) == 0:
+        log.error('Might be an empty file: {}'.format(x))
+        return None
+    s = m[0] # header line
+    try:
+        h = json.loads(s[1:]) # trim '@'
+    except:
+        log.error('Could not parse header line: {} ...'.format(s[1:40]))
+        h = {}
+    if header_only:
+        out = h
+    else:
+        # read matrix body
+        m = m[1:] # remove header line
+        gl = h.get('group_labels')
+        gb = h.get('group_boundaries')
+        d = {} # matrix lines
+        for i, e in enumerate(gb[1:], start=1):
+            s = gb[i-1] # start
+            gli = gl[i-1] # group labels
+            gli = gli.replace('_fwd.bed', '.bed') # updated
+            gli = gli.replace('_rev.bed', '.bed') # updated
+            d.update({gli:m[s:e]}) # save to dict
+        out = d
+    return out
