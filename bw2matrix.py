@@ -88,12 +88,22 @@ class Bw2matrix(object):
             self.bw_list = None
             tag = 0
             for f,r in zip(self.bw_fwd_list, self.bw_rev_list):
-                f1 = file_prefix(f).strip('_fwd')
-                r1 = file_prefix(r).strip('_rev')
+                f1 = file_prefix(f).replace('_fwd', '')
+                r1 = file_prefix(r).replace('_rev', '')
                 if not f1 == r1:
                     tag += 1
-                    print('bw fwd/rev not matched: {} {}'.format(f, r))
+                    msg = '\n'.join([
+                        '{} : {}'.format(f1, f),
+                        '{} : {}'.format(r1, r),
+                    ])
+                    print(msg)
+                    print('bw fwd/rev not matched')
             if tag > 0:
+                msg = '\n'.join([
+                    'fwd : {}'.format(';'.join(f)),
+                    'rev : {}'.format(';'.join(r)),
+                ])
+                print(msg)
                 raise ValueError('bw fwd/rev files illegal')
             # update samplesLabel
             self.samplesLabel = fix_label(self.bw_fwd_list, self.samplesLabel)
@@ -101,7 +111,7 @@ class Bw2matrix(object):
         elif is_valid_file(self.bw_list, is_valid_bigwig):
             self.strand_specific = False
             self.bw_fwd_list = self.bw_rev_list = None
-            self.samplesLabel = fix_label(self.bw_rwd_list, self.samplesLabel)
+            self.samplesLabel = fix_label(self.bw_list, self.samplesLabel)
         else:
             raise ValueError('bw_list, bw_fwd_list, bw_rev_list required:')
         if not isinstance(self.out_prefix, str):

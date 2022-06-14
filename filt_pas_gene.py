@@ -39,6 +39,7 @@ import io
 import pathlib
 import argparse
 import pybedtools
+from datetime import datetime
 from xopen import xopen
 
 
@@ -240,6 +241,10 @@ def filt_bed_size(x, y, gene_size=5000, gene_biotype=None, overwrite=False):
         bed.saveas(y)
 
 
+def cur_time():
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', dest='gtf', required=True, 
@@ -293,7 +298,7 @@ def main():
     # bed_pc = os.path.join(out_dir, prefix+'.gene.pas.f{}.g{}.pc.bed'.format(fs, gs))
 
     # step1. gtf to bed, feature, (all genes)
-    print('1. extract all gene')
+    print('[{}] 1. extract all gene'.format(cur_time()))
     kwargs = {
         'feature': args.feature, 
         'gene_biotype': None, # args.gene_biotype,
@@ -303,16 +308,16 @@ def main():
     gtf_to_bed(args.gtf, bed_gene, **kwargs) # protein_coding, genes
 
     # step2. filt by flanking size
-    print('2. filter by flank size={}'.format(flank_size))
+    print('[{}] 2. filter by flank size={}'.format(cur_time(), flank_size))
     filt_by_flank(bed_gene, bed_flank, flank_size=flank_size, overwrite=args.overwrite)
 
     # step3. filt by PAS DB
-    print('3. filter by PAS_DB')
+    print('[{}] 3. filter by PAS_DB'.format(cur_time()))
     if os.path.exists(args.pas_bed):
         filt_by_pas(bed_flank, args.pas_bed, bed_pas, overwrite=args.overwrite)
 
     # step4. filt by gene size, gene_biotype=protein-coding
-    print('4. filter by, protein-coding and gene size={}'.format(gene_size))
+    print('[{}] 4. filter by, protein-coding and gene size={}'.format(cur_time(), gene_size))
     filt_bed_size(bed_pas, bed_size, gene_biotype='protein_coding', overwrite=args.overwrite)
 
     # print('Finish, save to file: {}'.format(bed_pas))

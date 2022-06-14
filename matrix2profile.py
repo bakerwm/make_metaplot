@@ -8,7 +8,7 @@ $ plotProfile \
   --samplesLabel A B C --regionsLabel gene1 gene2 \
   --colors black lightblue --yMin 0 --yMax 0.4 \
   --perGroup
-  # --numPlotsPerRow 2
+  --numPlotsPerRow 2
   # --plotTitle
   # --plotHeight 4
   # --plotWidth 1
@@ -38,7 +38,7 @@ class Matrix2profile(object):
       --samplesLabel A B C --regionsLabel gene1 gene2 \
       --colors black lightblue --yMin 0 --yMax 0.4 \
       --perGroup
-      # --numPlotsPerRow 2
+      --numPlotsPerRow 2
       # --plotTitle
       # --plotHeight 4
       # --plotWidth 1
@@ -128,6 +128,8 @@ class Matrix2profile(object):
             ])
         # extra
         args_extra = '--perGroup' if self.perGroup else ''
+        if self.numPlotsPerRow > 0:
+            args_extra += ' --numPlotsPerRow {}'.format(self.numPlotsPerRow)
         if isinstance(self.plotType, str):
             args_extra += ' --plotType {}'.format(self.plotType)
         if isinstance(self.averageType, str):
