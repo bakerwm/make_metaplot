@@ -9,12 +9,10 @@ import pathlib
 import argparse
 import shutil
 from matplotlib import colors
-
 from utils import (
-    make_config, update_obj, load_yaml, dump_yaml, file_abspath, file_prefix,
-    fix_label, fix_bw, is_valid_bam, is_valid_bigwig, is_valid_bed, log,
-    load_matrix, load_matrix_header
+    make_config, update_obj, dump_yaml, file_abspath, log, load_matrix,
 )
+
 
 class Matrix2heatmap(object):
     """

@@ -22,11 +22,8 @@ import pathlib
 import argparse
 import shutil
 from matplotlib import colors
-
 from utils import (
-    make_config, update_obj, dump_yaml, file_abspath, file_prefix,
-    fix_label, is_valid_bed, is_valid_file, log,
-    load_matrix, load_matrix_header
+    make_config, update_obj, dump_yaml, file_abspath, log, load_matrix,
 )
 
 
