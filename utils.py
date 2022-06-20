@@ -369,6 +369,18 @@ def symlink_file(src, dest, absolute_path=False, force=False):
         log.warning('symlink_file() failed, src not vaild: {}'.format(src))
 
 
+def fix_out_dir(x):
+    """
+    fix out_dir, if not "str", set "cwd()"
+    """
+    if not isinstance(x, str):
+        x = pathlib.Path.cwd()
+    x = os.path.abspath(x)
+    if not os.path.exists(x):
+        os.makedirs(x)
+    return x
+
+
 def fix_label(x, labels=None):
     """
     Make sure the length of samples and labels identical
@@ -535,6 +547,10 @@ def load_matrix(x, header_only=False):
         matrix file
     header_only : bool
         return the header line only, default: False
+    'body':
+    'ref point':
+    'sample_labels': *
+    'group_labels': *
     """
     # read matrix file (gzipped)
     try:
