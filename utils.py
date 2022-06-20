@@ -135,7 +135,7 @@ def make_config(**kwargs):
         'endLabel': 'TES',
         'matrix_type': 'scale-regions', # reference-point
         'numberOfProcessors': 4,
-        'numPlotsPerRow': 0,
+        'numPlotsPerRow': None,
         'sortRegions': 'keep',
         'sortUsing': 'mean',
         'sortUsingSamples': 1,

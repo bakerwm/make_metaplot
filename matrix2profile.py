@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+#-*- encoding:utf-8 -*-
 """
 Generate profile plot 
 
@@ -26,8 +26,9 @@ from matplotlib import colors
 from utils import (
     make_config, update_obj, dump_yaml, file_abspath, file_prefix,
     fix_label, is_valid_bed, is_valid_file, log,
-    load_matrix_header
+    load_matrix, load_matrix_header
 )
+
 
 ## profile, heatmap, ...
 class Matrix2profile(object):
@@ -49,46 +50,84 @@ class Matrix2profile(object):
     def __init__(self, **kwargs):
         c = make_config(**kwargs)
         self = update_obj(self, c, force=True)
-        self.init_args()
+        self.update_args() # set default to None
+        self.update_labels()
+        self.update_colors()
         self.init_files()
         self.cmd = self.get_cmd()
-        # save config
-        dump_yaml(self.__dict__, self.config)
+        dump_yaml(self.__dict__, self.config) # save config
 
 
-    def init_args(self):
-        if not hasattr(self, 'colors'):
-            self.colors = None
-        # check input files + labels
-        self.matrix = file_abspath(self.matrix)
-        d = load_matrix_header(self.matrix)
-        if d is None:
-            raise ValueError('unable to read matrix: {}'.format(self.matrix))
-        # check if reference-point or scale-regions
-        bd = d.get('body', [0])
-        rf = d.get('ref point', [None])
-        self.is_refpoint = isinstance(rf[0], str) and bd[0] == 0
-        # update labels
-        d_samples_label = d.get('sample_labels', [None])
-        d_regions_label = d.get('group_labels', [None])
+    def basic_args(self):
+        """
+        default arguments [38]
+        to-do: outFileSortedRegions, outFileNameData
+        """        
+        alist = [
+            'startLabel', 'endLabel', 'refPointLabel', 'samplesLabel', 
+            'regionsLabel', 'plotTitle', 'yAxisLabel', 'labelRotation',
+            'colors', 'numPlotsPerRow', 'clusterUsingSamples', 
+            'plotHeight', 'plotWidth', 'plotType',
+            'yMin', 'yMax', 'legendLocation',
+            'kmeans', 'hclust', 'silhouette', 'dpi', 'averageType',
+            'outFileSortedRegions', 'outFileNameData',
+        ]
+        return alist
+
+
+    def update_args(self):
+        """
+        assign None to arguments, if not exists
+        """
+        alist = self.basic_args()
+        d = {i:getattr(self, i, None) for i in alist}
+        self = update_obj(self, d, force=True) # update        
+        self.whatToShow = '"{}"'.format(self.whatToShow) # update whatToShow
+
+
+    def update_labels(self):
+        """
+        convert to str, or keep None
+        1. samplesLabel, regionsLabel
+        2. startLabel, endLabel / refPointLabel 
+        3. yAxisLabel
+        4. plotTitle, legendLocation
+        """
+        # load matrix
+        mh = load_matrix(self.matrix, header_only=True)
+        mh_sl = mh.get('sample_labels', [None])
+        mh_rl = mh.get('group_labels', [None])
+        is_refPoint = mh.get('body', 0) == 0 # body == 0
+        # 1. samplesLabel, regionsLabel
         if isinstance(self.samplesLabel, list):
-            self.is_valid_sl = len(d_samples_label) == len(self.samplesLabel)
-        else:
-            self.is_valid_sl = False
+            k1 = len(self.samplesLabel) == len(mh_sl)
+            # raise error
+            self.samplesLabel = ' '.join(self.samplesLabel)
         if isinstance(self.regionsLabel, list):
-            self.is_valid_rl = len(d_regions_label) == len(self.regionsLabel)
+            k2 = len(self.regionsLabel) == len(mh_rl)
+            # raise error
+            self.regionsLabel = ' '.join(self.regionsLabel)
+        # 2. startLabel, endLabel or refPointLabel
+        if is_refPoint:
+            self.startLabel, self.endLabel = [None, None]
         else:
-            self.is_valid_rl = False
-        # colors
-        if isinstance(self.colors, str):
-            self.cc = self.colors
-        elif isinstance(self.colors, list):
-            self.cc = ' '.join(self.colors)
-        else:
-            self.cc = None
+            self.refPointLabel = None
+        # 3. yAxisLabel
+        # 4. plotTitle, legendLocation
+
+
+    def update_colors(self):
+        """
+        colorMap: Reds Blues
+        colorList: white,red white,yellow,blue
+        colorNumber: int
+        """
+        if isinstance(self.colors, list):
+            self.colors = ' '.join(self.colors)
 
 
     def init_files(self):
+        self.matrix = file_abspath(self.matrix)
         if not isinstance(self.out_dir, str):
             self.out_dir = str(pathlib.Path.cwd())
         self.out_dir = file_abspath(self.out_dir)
@@ -107,45 +146,26 @@ class Matrix2profile(object):
 
 
     def get_cmd(self):
-        # basic
-        args_basic = ' '.join([
+        """
+        construct arguments to command line
+        """
+        alist = self.basic_args()
+        # args = self.__dict__.copy() #
+        args = {i:getattr(self, i, None) for i in alist}
+        dlist = ['--{} {}'.format(k, v) for k,v in args.items() if v is not None]
+        dline = ' '.join(dlist) # to cmd line
+        if self.perGroup:
+            dline += ' --perGroup'
+        # main args
+        cmd = ' '.join([
             '{}'.format(shutil.which('plotProfile')),
             '--matrixFile {}'.format(self.matrix),
             '--outFileName {}'.format(self.profile_file),
-            '--dpi {}'.format(self.dpi),
+            dline,            
+            '1> {}'.format(self.stdout),
+            '2> {}'.format(self.stderr),
         ])
-        if self.is_valid_sl:
-            args_basic += ' --samplesLabel {}'.format(' '.join(self.samplesLabel))
-        if self.is_valid_rl:
-            args_basic += ' --regionsLabel {}'.format(' '.join(self.regionsLabel))
-        # type
-        if self.is_refpoint:
-            args_type = '--refPointLabel {}'.format(self.refPointLabel)
-        else:
-            args_type = ' '.join([
-                '--startLabel {}'.format(self.startLabel),
-                '--endLabel {}'.format(self.endLabel),
-            ])
-        # extra
-        args_extra = '--perGroup' if self.perGroup else ''
-        if self.numPlotsPerRow > 0:
-            args_extra += ' --numPlotsPerRow {}'.format(self.numPlotsPerRow)
-        if isinstance(self.plotType, str):
-            args_extra += ' --plotType {}'.format(self.plotType)
-        if isinstance(self.averageType, str):
-            args_extra += ' --averageType {}'.format(self.averageType)
-        if self.cc is not None:
-            args_extra += ' --colors {}'.format(self.cc)
-        if isinstance(self.yMin, float):
-            args_extra += ' --yMin {}'.format(self.yMin)
-        if isinstance(self.yMax, float):
-            args_extra += ' --yMax {}'.format(self.yMax)        
-        args_extra += ' '.join([
-            ' 1> {}'.format(self.stdout),
-            ' 2> {}'.format(self.stderr),
-        ])
-        # cmd
-        return ' '.join([args_basic, args_type, args_extra])
+        return cmd
 
 
     def run(self):
@@ -153,13 +173,15 @@ class Matrix2profile(object):
         with open(self.profile_cmd, 'wt') as w:
             w.write(self.cmd+'\n')
         # run
-        print(self.overwrite)
         if os.path.exists(self.profile_file) and not self.overwrite:
             # if re-cal required, remove the old file
             log.info('plotProfile() skipped, file exists: {}'.format(self.profile_file))
         else:
             log.info('run plotProfile: {}'.format(self.cmd))
             os.system(self.cmd)
+        # check output
+        if not os.path.exists(self.profile_file):
+            log.error('plotProfile() failed, file not found: {}'.format(self.profile_file))
 
 
 def get_args():
