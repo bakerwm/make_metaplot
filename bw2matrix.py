@@ -483,9 +483,9 @@ def get_args():
     parser.add_argument('-op', '--out-prefix', dest='out_prefix', default='bw2matrix',
         help='prefix for output files, default: [bw2matrix]')
     parser.add_argument('-t', '--matrix-type', dest='matrix_type',
-        default='scale-regions', choices=['scales-regions', 'reference-point'],
+        default='scale-regions', choices=['scale-regions', 'reference-point'],
         help='choose the matrix type, default: [scale-regions]')
-    parser.add_argument('-sl', '--samplesLabel', default=None,
+    parser.add_argument('-sl', '--samplesLabel', nargs='+', default=None,
         help='samples label')
     parser.add_argument('-bs', '--binSize', type=int, default=50,
         help='the bin_size, default [50]')

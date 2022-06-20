@@ -222,6 +222,9 @@ def main():
         show_help(args['config'])
     else:
         d1 = make_config()
+        if d1 is None:
+            print('error, check config file: {}'.format(args['config']))
+            sys.exit(1)
         d1.update(load_yaml(args['config']))
         fun, d2 = find_fun(d1)
         if fun is None:

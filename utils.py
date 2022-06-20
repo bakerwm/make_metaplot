@@ -130,6 +130,7 @@ def make_config(**kwargs):
         'unscaled5prime': 0,
         'unscaled3prime': 0,
         'startLabel': 'TSS',
+        'referencePoint': 'TSS',
         'refPointLabel': 'TSS',
         'endLabel': 'TES',
         'matrix_type': 'scale-regions', # reference-point
@@ -138,6 +139,7 @@ def make_config(**kwargs):
         'sortRegions': 'keep',
         'sortUsing': 'mean',
         'sortUsingSamples': 1,
+        'averageTypeSummaryPlot': 'mean',
         'boxAroundHeatmaps': 'yes',
         'plotTitle': 'Heatmap',
         'whatToShow': 'plot, heatmap and colorbar',

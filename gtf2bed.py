@@ -24,6 +24,9 @@ def gtf_to_bed(gtf, bed, **kwargs):
         TEC|protein_coding, default: None
     Convert GTF to BED format
     filt by: gene_biotype (ENSEMBL), gene_type (GENCODE)
+
+    duplicated gene records in Ensembl
+    eg: Zfp91, Zkscan7, ...
     """
     overwrite = kwargs.get('overwrite', False)
     if os.path.exists(bed) and overwrite is False:
