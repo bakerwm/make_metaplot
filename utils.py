@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+#-*- encoding:utf-8 -*-
 """
 Generate metaplot using deeptools toolkit
 
@@ -34,15 +34,14 @@ Antisense: bigWig(fwd) gene(-); bigWig(fwd) gene(+)
 ### A. Simple example for DNA
 (bam/bw files; region files; out_dir)
 
-
 ### B. Simple example for RNA
 (bam files(required); region files; out_dir)
-
 
 ### C. Complicated examples
 (normalization, scale, ...)
 """
 
+from difflib import Match
 import os
 import sys
 import pathlib
@@ -56,6 +55,7 @@ import pyBigWig
 import json
 import yaml
 import toml
+from datetime import datetime
 
 # from hiseq.utils.genome import Genome # !!! ?
 # from hiseq.utils.utils import Config, update_obj, log
@@ -98,7 +98,7 @@ def make_bam2bw_config(**kwargs):
         'effectiveGenomeSize': None,
         'overwrite': False,
         'strand_specific': False, # for bigWig files, matrix, ...
-        'extendReads': False,
+        'extendReads': None,
         'centerReads': False,
     }
     args_bw.update(kwargs)
@@ -148,10 +148,10 @@ def make_config(**kwargs):
         'heatmapHeight': 10,
         'heatmapWidth': 4,
         'labelRotation': 0,
-        'yMax': 'None',
-        'yMin': 'None',
-        'zMax': 'None',
-        'zMin': 'None',
+        'yMax': None,
+        'yMin': None,
+        'zMax': None,
+        'zMin': None,
         'themes': 0,
         'genome': None,
         'blacklist': None,
@@ -162,17 +162,17 @@ def make_config(**kwargs):
         'strand_specific': False, # for bigWig files, matrix, ...
         'perGroup': False,
         'colors': None,
-        'extendReads': False,
+        'extendReads': None,
         'matrix': None,
     }
     args_init.update(kwargs)
     return args_init
 
 
-################################################################################
-## 0. help functions
+# 0. help functions
 def update_obj(obj, d, force=True, remove=False):
-    """Update the object, by dict
+    """
+    Update the object, by dict
     d: dict
     force: bool, update exists attributes
     remove: bool, remove exists attributes
@@ -586,3 +586,106 @@ def load_matrix(x, header_only=False):
             d.update({gli:m[s:e]}) # save to dict
         out = d
     return out
+
+
+def get_program_msg(**kwargs):
+    """
+    Display the following informat:
+    Data, program, input file, output file, ...
+
+    format:
+       Date : ------
+    Program : ------
+    ...
+    """
+    a = [
+        'bam_list', 'bw_list', 'bw_fwd_list', 'bw_rev_list', 'matrix',
+        'region_list', 'out_dir',
+    ]
+    args = {i:None for i in a} # init
+    args.update(kwargs) # input
+    m = args.get('matrix', None)
+    bf = args.get('bw_fwd_list', None)
+    br = args.get('bw_rev_list', None)
+    bw = args.get('bw_list', None)
+    bam = args.get('bam_list', None)
+    sample_list = args.get('bam_list', None)
+    sample_labels = args.get('samplesLabel', None)
+    region_list = file_prefix(args.get('region_list', None))
+    region_labels = args.get('regionsLabel', None)
+    # find func
+    if is_valid_file(m, is_valid_matrix):
+        fun1, fun2 = ['Matrix2profile', 'Matrix2heatmap']
+        mh = load_matrix(m, header_only=True)
+        sample_list = region_list = None
+        sample_labels = mh.get('sample_labels', [None])
+        region_labels = mh.get('group_labels', [None])
+        up = mh.get('upstream', [None])
+        down = mh.get('downstream', [None])
+        body = mh.get('body', [None])
+        refpoint = mh.get('ref point', [None])
+        if body[0] > 0:
+            # scale-regions
+            args['matrix_type'] = 'scale-regions'
+            args['beforeRegionStartLength'] = up[0]
+            args['regionBodyLength'] = body[0]
+            args['afterRegionStartLength'] = down[0]
+        else:
+            args['matrix_type'] = 'reference-point'
+            args['beforeRegionStartLength'] = up[0]
+            args['regionBodyLength'] = 0
+            args['afterRegionStartLength'] = down[0]
+            args['refPointLabel'] = refpoint[0]
+    elif is_valid_file([bf, br], is_valid_bigwig):
+        fun1, fun2 = ['Bw2profile', 'Bw2heatmap']
+        args['strand_specific'] = True
+        sample_list = file_prefix(bf)
+    elif is_valid_file(bw, is_valid_bigwig):
+        fun1, fun2 = ['Bw2profile', 'Bw2heatmap']
+        args['strand_specific'] = False
+        sample_list = file_prefix(bw)
+    elif is_valid_file(bam, is_valid_bam):
+        fun1, fun2 = ['Bam2profile', 'Bam2heatmap']
+        args['strand_specific'] = args.get('strand_specific', False)
+        sample_list = file_prefix(bam)
+    else:
+        fun1 = fun2 = None
+    if args.get('matrix_type', 'scale-regions') == 'scale-regions':
+        region_size = '[({} bp)--{}--({} bp)--{}--({} bp)]'.format(
+            args.get('beforeRegionStartLength', 0),
+            args.get('startLabel', 'TSS'),
+            args.get('regionBodyLength', 0),
+            args.get('endLabel', 'TES'),
+            args.get('afterRegionStartLength', 0),
+        )
+    else:
+        region_size = '[({} bp)--{}--({} bp)]'.format(
+            args.get('beforeRegionStartLength', 0),
+            args.get('refPointLabel', 0),
+            args.get('afterRegionStartLength', 0),
+        )
+    # msg
+    # updated
+    if sample_list is None:
+        sample_list = []
+    if region_list is None:
+        region_list = []
+    msg = '\n'.join([
+        '='*80,
+        '{:>14} : {}'.format('Date', get_cur_time()),
+        '{:>14} : {}'.format('Program', 'make_metaplot'),
+        '{:>14} : {}(), {}()'.format('sub-commands', fun1, fun2),
+        '{:>14} : {}'.format('matrix_type', args.get('matrix_type', 'scale-regions')),
+        '{:>14} : {}'.format('region', region_size),
+        '{:>14} : {}'.format('samples', ','.join(sample_list)),
+        '{:>14} : {}'.format('sample_labels', ','.join(sample_labels)),
+        '{:>14} : {}'.format('region', ','.join(region_list)),
+        '{:>14} : {}'.format('region_labels', ','.join(region_labels)),
+        '='*80,
+    ])
+    return msg
+
+
+def get_cur_time():
+    # from datetime import datetime
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")

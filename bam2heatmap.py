@@ -1,30 +1,29 @@
 #!/usr/bin/env python
 #-*- encoding:utf-8 -*-
 """
-Convert BAM to matrix
+Generate heatmap from BAM files
 1. Bam2bw() : BAM to bigWig
 2. Bw2matrix() : bigWig to matrix
-3. Matrix2profile() : matrix to profile
+3. Matrix2heatmap() : matrix to heatmap
 """
 
 
 import os
 import argparse
-from bam2bw import Bam2bw
 from bam2matrix import Bam2matrix
-from matrix2profile import Matrix2profile
+from matrix2heatmap import Matrix2heatmap
 from utils import (
-    make_config, update_obj, file_abspath, fix_out_dir, log,
+    make_config, update_obj, file_prefix, file_abspath, fix_out_dir, log,
 )
 from parse_args import (
-    add_io_parser, add_bam_parser, add_bw_parser, add_plot_parser, 
+    add_io_parser, add_bam_parser, add_bw_parser, add_plot_parser,
     get_init_args,
 )
 
 
-class Bam2profile(object):
+class Bam2heatmap(object):
     """
-    Convert BAM to profile:
+    Convert BAM to heatmap:
     1. strand-specific: yes (prefix_sens.mat.gz, prefix_anti.mat.gz)
     2. strand-specific: no (prefix.mat.gz)
     """
@@ -32,25 +31,27 @@ class Bam2profile(object):
         # c = make_config(**kwargs)
         c = get_init_args(**kwargs)
         self = update_obj(self, c, force=True)
-        self.init_args()
+        self.update_args()
 
 
-    def init_args(self):
+    def update_args(self):
         # bam_list, region_list, strand_specific
         self.out_dir = fix_out_dir(self.out_dir)
         self.out_dir = file_abspath(self.out_dir)
         self.project_dir = os.path.join(self.out_dir, self.prefix)
         self.bam_list = file_abspath(self.bam_list)
         self.region_list = file_abspath(self.region_list)
+        if not isinstance(self.prefix, str):
+            self.prefix = file_prefix(self.matrix)
 
 
     def run(self):
         # 1. BAM to matrix (str, list)
         args = self.__dict__.copy()
         m = Bam2matrix(**args).run()
-        # 2. matrix to profile
+        # 2. matrix to heatmap
         args.update({
-            'out_dir': os.path.join(self.out_dir, '3.matrix2profile'),
+            'out_dir': os.path.join(self.out_dir, '4.matrix2heatmap'),
         })
         if isinstance(m, list):
             # sense strand
@@ -58,19 +59,19 @@ class Bam2profile(object):
                 'matrix': m[0],
                 'prefix': None,
             })
-            Matrix2profile(**args).run()
+            Matrix2heatmap(**args).run()
             # antisense strand
             args.update({'matrix': m[1]})
-            Matrix2profile(**args).run()
+            Matrix2heatmap(**args).run()
         else:
             args.update({'matrix': m})
-            Matrix2profile(**args).run()
+            Matrix2heatmap(**args).run()
 
 
 def get_args():
     example = ' '.join([
         'Example: \n',
-        '$ python bam2profile.py',
+        '$ python bam2heatmap.py',
         '-b f1.bam f2.bam -r g1.bed -o out_dir -op metaplot',
         '-t scale-regions -u 2000 -d 2000 -m 2000 --binSize 100',
         '--blackListFileName bl.bed',
@@ -78,7 +79,7 @@ def get_args():
         '--startLabel TSS --endLabel TES -p 8',
     ])
     parser = argparse.ArgumentParser(
-        prog='bam2profile.py', description='bam2profile', epilog=example,
+        prog='bw2matrix.py', description='bw2matrix', epilog=example,
         formatter_class=argparse.RawTextHelpFormatter)
     parser = add_io_parser(parser)
     parser = add_bam_parser(parser)
@@ -149,7 +150,7 @@ def get_args():
 
 def main():
     args = vars(get_args().parse_args())
-    Bam2profile(**args).run()
+    Bam2heatmap(**args).run()
 
     
 if __name__ == '__main__':

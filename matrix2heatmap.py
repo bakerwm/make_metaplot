@@ -10,8 +10,10 @@ import argparse
 import shutil
 from matplotlib import colors
 from utils import (
-    make_config, update_obj, dump_yaml, file_abspath, log, load_matrix,
+    make_config, update_obj, dump_yaml, file_prefix, file_abspath, log, 
+    load_matrix, fix_out_dir,
 )
+from parse_args import  add_plot_parser, get_plot_args
 
 
 class Matrix2heatmap(object):
@@ -25,7 +27,8 @@ class Matrix2heatmap(object):
       --samplesLabel WT 15m 30m 120m --regionsLabel PAS-both
     """
     def __init__(self, **kwargs):
-        c = make_config(**kwargs)
+        # c = make_config(**kwargs)
+        c = get_plot_args(**kwargs)
         self = update_obj(self, c, force=True)
         self.update_args() # set default to None
         self.update_labels()
@@ -63,6 +66,8 @@ class Matrix2heatmap(object):
         d = {i:getattr(self, i, None) for i in alist}
         self = update_obj(self, d, force=True) # update        
         self.whatToShow = '"{}"'.format(self.whatToShow) # update whatToShow
+        if not isinstance(self.prefix, str):
+            self.prefix = file_prefix(self.matrix)
 
 
     def update_labels(self):
@@ -93,6 +98,10 @@ class Matrix2heatmap(object):
         else:
             self.refPointLabel = None
         # 3. xAxisLabel, yAxisLabel
+        if isinstance(self.xAxisLabel, str):
+            self.xAxisLabel = '"{}"'.format(self.xAxisLabel)
+        if isinstance(self.yAxisLabel, str):
+            self.yAxisLabel = '"{}"'.format(self.yAxisLabel)
         # 4. plotTitle, legendLocation
 
 
@@ -112,11 +121,12 @@ class Matrix2heatmap(object):
 
     def init_files(self):
         self.matrix = file_abspath(self.matrix)
-        if not isinstance(self.out_dir, str):
-            self.out_dir = str(pathlib.Path.cwd())
-        self.out_dir = file_abspath(self.out_dir)
-        self.project_dir = os.path.join(self.out_dir, self.out_prefix)
-        prefix = os.path.join(self.project_dir, self.out_prefix)
+        self.out_dir = fix_out_dir(self.out_dir)
+        self.project_dir = self.out_dir
+        # if not isinstance(self.out_dir, str):
+        #     self.out_dir = str(pathlib.Path.cwd())
+        # self.out_dir = file_abspath(self.out_dir)
+        prefix = os.path.join(self.project_dir, self.prefix)
         args = {
             'config': os.path.join(self.project_dir, 'config.yaml'),
             'heatmap_cmd': os.path.join(self.project_dir, prefix+'.plotHeatmap.sh'),
@@ -178,82 +188,79 @@ def get_args():
     parser = argparse.ArgumentParser(
         prog='matrix2heatmap.py', description='convert to heatmap', epilog=example,
         formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('-m', dest='matrix', required=True,
-        help='matrix file, by computeMatrix ')
-    parser.add_argument('-o', dest='out_dir', required=True,
-        help='directory to save bigWig file')
-    parser.add_argument('-op', '--out-prefix', dest='out_prefix', default='matrix2heatmap',
-        help='prefix for output files, default: [matrix2heatmap]')
-    parser.add_argument('--plotType', default='lines',
-        choices=['lines', 'fill', 'se', 'std'],
-        help='type of the plot, choices [lines, fill, se, std] default: [lines]')
+    parser = add_plot_parser(parser)
+    # parser.add_argument('-m', dest='matrix', required=True,
+    #     help='matrix file, by computeMatrix ')
+    # parser.add_argument('-o', dest='out_dir', required=True,
+    #     help='directory to save bigWig file')
+    # parser.add_argument('-op', '--out-prefix', dest='prefix', default='matrix2heatmap',
+    #     help='prefix for output files, default: [matrix2heatmap]')
+    # parser.add_argument('--plotType', default='lines',
+    #     choices=['lines', 'fill', 'se', 'std'],
+    #     help='type of the plot, choices [lines, fill, se, std] default: [lines]')
 
-    parser.add_argument('-sl', '--samplesLabel', nargs='+', default=None,
-        help='samples label')
-    parser.add_argument('-rl', '--regionsLabel', nargs='+', default=None,
-        help='labels for regions in plot, defautl: [None] auto')
-    parser.add_argument('--labelRotation', type=int, default=0, 
-        help='Rotate the x axis labels in degrees')
-    parser.add_argument('-st', '--startLabel', default='TSS',
-        help='start label, default: [TSS]')
-    parser.add_argument('-ed', '--endLabel', default='TES',
-        help='end label, default: [TES]')
-    parser.add_argument('-rf', '--refPointLabel', default='TSS',
-        help='label on refpoint')
+    # parser.add_argument('-sl', '--samplesLabel', nargs='+', default=None,
+    #     help='samples label')
+    # parser.add_argument('-rl', '--regionsLabel', nargs='+', default=None,
+    #     help='labels for regions in plot, defautl: [None] auto')
+    # parser.add_argument('--labelRotation', type=int, default=0, 
+    #     help='Rotate the x axis labels in degrees')
+    # parser.add_argument('-st', '--startLabel', default='TSS',
+    #     help='start label, default: [TSS]')
+    # parser.add_argument('-ed', '--endLabel', default='TES',
+    #     help='end label, default: [TES]')
+    # parser.add_argument('-rf', '--refPointLabel', default='TSS',
+    #     help='label on refpoint')
 
-    parser.add_argument('-cl', '--color-list', dest='colorList', nargs='+', default=None,
-        help='color list for heatmap, eg: black,yellow,blue default: [None] auto')
-    parser.add_argument('-cm', '--color-map', dest='colorMap', nargs='+', default=None,
-        help='color map to use for heamtp, eg: Reds Blues')
-    parser.add_argument('-cn', '--color-number', dest='colorNumber', type=int, default=None,
-        help='control the number of transitions for colorList')
-    parser.add_argument('--alpha', type=float, default=1.0, 
-        help='the alpha channel, default [1.0]')
+    # parser.add_argument('-cl', '--color-list', dest='colorList', nargs='+', default=None,
+    #     help='color list for heatmap, eg: black,yellow,blue default: [None] auto')
+    # parser.add_argument('-cm', '--color-map', dest='colorMap', nargs='+', default=None,
+    #     help='color map to use for heamtp, eg: Reds Blues')
+    # parser.add_argument('-cn', '--color-number', dest='colorNumber', type=int, default=None,
+    #     help='control the number of transitions for colorList')
+    # parser.add_argument('--alpha', type=float, default=1.0, 
+    #     help='the alpha channel, default [1.0]')
 
-    parser.add_argument('--sortRegions', default='keep',
-        choices=['descend', 'ascend', 'no', 'keep'],
-        help='The output should be sorted by the way.')
-    parser.add_argument('--sortUsing', default='mean',
-        choices=['mean', 'median', 'max', 'min', 'sum', 'region_length'],
-        help='Which method should be used for sorting, default: [mean]')
-    parser.add_argument('--sortUsingSamples', type=str, default=None,
-        help='List of sample numbers for sorting, default: [None]')
-    parser.add_argument('--averageTypeSummaryPlot', default='mean',
-        choices=['mean', 'median', 'max', 'min', 'sum', 'std'],
-        help='Which method should be used for sorting, default: [mean]')
+    # parser.add_argument('--sortRegions', default='keep',
+    #     choices=['descend', 'ascend', 'no', 'keep'],
+    #     help='The output should be sorted by the way.')
+    # parser.add_argument('--sortUsing', default='mean',
+    #     choices=['mean', 'median', 'max', 'min', 'sum', 'region_length'],
+    #     help='Which method should be used for sorting, default: [mean]')
+    # parser.add_argument('--sortUsingSamples', type=str, default=None,
+    #     help='List of sample numbers for sorting, default: [None]')
+    # parser.add_argument('--averageTypeSummaryPlot', default='mean',
+    #     choices=['mean', 'median', 'max', 'min', 'sum', 'std'],
+    #     help='Which method should be used for sorting, default: [mean]')
 
-    parser.add_argument('--heatmapHeight', type=int, default=12, choices=range(3, 101),
-        help='Plot height in cm, 3 to 100, default: [12]')
-    parser.add_argument('--heatmapWidth', type=int, default=4, choices=range(1, 101),
-        help='Plot width in cm, 1 to 100, default: [4]')
-    parser.add_argument('--whatToShow', choices=['plot and heatmap', 'heatmap only', 'heatmap and colorbar'],
-        default='plot and heatmap', help='plot content, default [plot and heatmap]')
+    # parser.add_argument('--heatmapHeight', type=int, default=12, choices=range(3, 101),
+    #     help='Plot height in cm, 3 to 100, default: [12]')
+    # parser.add_argument('--heatmapWidth', type=int, default=4, choices=range(1, 101),
+    #     help='Plot width in cm, 1 to 100, default: [4]')
+    # parser.add_argument('--whatToShow', choices=['plot and heatmap', 'heatmap only', 'heatmap and colorbar'],
+    #     default='plot and heatmap', help='plot content, default [plot and heatmap]')
 
-    parser.add_argument('--yMin', type=float, default=None,
-        help='Minimum value for the Y-axis')
-    parser.add_argument('--yMax', type=float, default=None,
-        help='Maximum value for the Y-axis')
-    parser.add_argument('--zMin', type=float, default=None,
-        help='Minimum value for heatmap intensities')
-    parser.add_argument('--zMax', type=float, default=None,
-        help='Maximum value for heatmap intensities')
-    parser.add_argument('--perGroup', action='store_true',
-        help='plot all samples by group')
-    parser.add_argument('-bl', '--blackListFileName', dest='blackListFileName',
-        default=None, help='blacklist file')
-    parser.add_argument('-p', dest='numberOfProcessors', type=int, default=4,
-        help='number of processors, default: [4]')
-    parser.add_argument('-O', '--overwrite', dest='overlap', action='store_true',
-        help='Overwrite output file')
+    # parser.add_argument('--yMin', type=float, default=None,
+    #     help='Minimum value for the Y-axis')
+    # parser.add_argument('--yMax', type=float, default=None,
+    #     help='Maximum value for the Y-axis')
+    # parser.add_argument('--zMin', type=float, default=None,
+    #     help='Minimum value for heatmap intensities')
+    # parser.add_argument('--zMax', type=float, default=None,
+    #     help='Maximum value for heatmap intensities')
+    # parser.add_argument('--perGroup', action='store_true',
+    #     help='plot all samples by group')
+    # parser.add_argument('-bl', '--blackListFileName', dest='blackListFileName',
+    #     default=None, help='blacklist file')
+    # parser.add_argument('-p', dest='numberOfProcessors', type=int, default=4,
+    #     help='number of processors, default: [4]')
+    # parser.add_argument('-O', '--overwrite', dest='overlap', action='store_true',
+    #     help='Overwrite output file')
     return parser
 
 
 def main():
     args = vars(get_args().parse_args())
-#     args.update({
-#         'out_dir': os.path.dirname(args['out']),
-#         'out_prefix': file_prefix(args['out']),
-#     })
     Matrix2heatmap(**args).run()
 
     

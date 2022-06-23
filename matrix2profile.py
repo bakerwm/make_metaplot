@@ -18,16 +18,17 @@ $ plotProfile \
 """
 
 import os
-import pathlib
+# import pathlib
 import argparse
 import shutil
 from matplotlib import colors
 from utils import (
-    make_config, update_obj, dump_yaml, file_abspath, log, load_matrix,
+    make_config, update_obj, dump_yaml, file_abspath, file_prefix, log, 
+    load_matrix, fix_out_dir, 
 )
+from parse_args import  add_plot_parser, get_plot_args
 
 
-## profile, heatmap, ...
 class Matrix2profile(object):
     """
     Example:
@@ -37,15 +38,10 @@ class Matrix2profile(object):
       --colors black lightblue --yMin 0 --yMax 0.4 \
       --perGroup
       --numPlotsPerRow 2
-      # --plotTitle
-      # --plotHeight 4
-      # --plotWidth 1
-      # --clusterUsingSamples 1
-      # --refPointLabel TSS
-      # --startLabel TSS --endLabel TES
     """
     def __init__(self, **kwargs):
-        c = make_config(**kwargs)
+        # c = make_config(**kwargs)
+        c = get_plot_args(**kwargs)
         self = update_obj(self, c, force=True)
         self.update_args() # set default to None
         self.update_labels()
@@ -80,6 +76,8 @@ class Matrix2profile(object):
         d = {i:getattr(self, i, None) for i in alist}
         self = update_obj(self, d, force=True) # update        
         self.whatToShow = '"{}"'.format(self.whatToShow) # update whatToShow
+        if not isinstance(self.prefix, str):
+            self.prefix = file_prefix(self.matrix)
 
 
     def update_labels(self):
@@ -110,6 +108,8 @@ class Matrix2profile(object):
         else:
             self.refPointLabel = None
         # 3. yAxisLabel
+        if isinstance(self.yAxisLabel, str):
+            self.yAxisLabel = '"{}"'.format(self.yAxisLabel)
         # 4. plotTitle, legendLocation
 
 
@@ -125,11 +125,9 @@ class Matrix2profile(object):
 
     def init_files(self):
         self.matrix = file_abspath(self.matrix)
-        if not isinstance(self.out_dir, str):
-            self.out_dir = str(pathlib.Path.cwd())
-        self.out_dir = file_abspath(self.out_dir)
-        self.project_dir = os.path.join(self.out_dir, self.out_prefix)
-        prefix = os.path.join(self.project_dir, self.out_prefix)
+        self.out_dir = fix_out_dir(self.out_dir)
+        self.project_dir = self.out_dir
+        prefix = os.path.join(self.project_dir, self.prefix)
         args = {
             'config': os.path.join(self.project_dir, 'config.yaml'),
             'profile_cmd': os.path.join(self.project_dir, prefix+'.plotProfile.sh'),
@@ -149,6 +147,7 @@ class Matrix2profile(object):
         alist = self.basic_args()
         # args = self.__dict__.copy() #
         args = {i:getattr(self, i, None) for i in alist}
+        # args = {k:'"{}"'.format(v) if isinstance(v, str) else v for k,v in args.items()} # string to ""
         dlist = ['--{} {}'.format(k, v) for k,v in args.items() if v is not None]
         dline = ' '.join(dlist) # to cmd line
         if self.perGroup:
@@ -174,11 +173,12 @@ class Matrix2profile(object):
             # if re-cal required, remove the old file
             log.info('plotProfile() skipped, file exists: {}'.format(self.profile_file))
         else:
-            log.info('run plotProfile: {}'.format(self.cmd))
+            log.info('run plotProfile: {}'.format(self.matrix))
             os.system(self.cmd)
         # check output
         if not os.path.exists(self.profile_file):
             log.error('plotProfile() failed, file not found: {}'.format(self.profile_file))
+        return self.profile_file
 
 
 def get_args():
@@ -192,40 +192,41 @@ def get_args():
     parser = argparse.ArgumentParser(
         prog='bw2matrix.py', description='bw2matrix', epilog=example,
         formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('-m', dest='matrix', required=True,
-        help='matrix file, by computeMatrix ')
-    parser.add_argument('-o', dest='out_dir', required=False,
-        help='directory to save bigWig file')
-    parser.add_argument('-op', '--out-prefix', dest='out_prefix', default='metaplot',
-        help='prefix for output files, default: [metaplot]')
-    parser.add_argument('--plotType', default='lines',
-        choices=['lines', 'fill', 'se', 'std', 'overlapped_lines', 'heatmap'],
-        help='type of the plot, default: [lines]')
-    parser.add_argument('--colors', nargs='+', default=None,
-        help='colors for the lines, default: [None] auto')
-    parser.add_argument('--averageType', default='mean',
-        choices=['mean', 'median', 'max', 'min', 'sum', 'region_length'],
-        help='Which method should be used for sorting, default: [mean]')
-    parser.add_argument('-rl', '--regionsLabel', nargs='+', default=None,
-        help='labels for regions in plot, defautl: [None] auto')
-    parser.add_argument('-sl', '--samplesLabel', nargs='+', default=None,
-        help='labels for samples in plot, default: [None] auto')
-    parser.add_argument('-st', '--startLabel', default='TSS',
-        help='start label, default: [TSS]')
-    parser.add_argument('-ed', '--endLabel', default='TES',
-        help='end label, default: [TES]')
-    parser.add_argument('--refPointLabel', default='TSS',
-        help='refPointLabel label, default: [TSS]')
-    parser.add_argument('--yMin', type=float, default=None,
-        help='Minimum value for the Y-axis')
-    parser.add_argument('--yMax', type=float, default=None,
-        help='Maximum value for the Y-axis')
-    parser.add_argument('--perGroup', action='store_true',
-        help='plot all samples by group')
-    parser.add_argument('-p', dest='numberOfProcessors', type=int, default=4, 
-        help='number of processors, default: [4]')
-    parser.add_argument('-O', '--overwrite', dest='overwrite', action='store_true',
-        help='Overwrite output file')
+    parser = add_plot_parser(parser)
+    # parser.add_argument('-m', dest='matrix', required=True,
+    #     help='matrix file, by computeMatrix ')
+    # parser.add_argument('-o', dest='out_dir', required=False,
+    #     help='directory to save bigWig file')
+    # parser.add_argument('-op', '--out-prefix', dest='out_prefix', default='metaplot',
+    #     help='prefix for output files, default: [metaplot]')
+    # parser.add_argument('--plotType', default='lines',
+    #     choices=['lines', 'fill', 'se', 'std', 'overlapped_lines', 'heatmap'],
+    #     help='type of the plot, default: [lines]')
+    # parser.add_argument('--colors', nargs='+', default=None,
+    #     help='colors for the lines, default: [None] auto')
+    # parser.add_argument('--averageType', default='mean',
+    #     choices=['mean', 'median', 'max', 'min', 'sum', 'region_length'],
+    #     help='Which method should be used for sorting, default: [mean]')
+    # parser.add_argument('-rl', '--regionsLabel', nargs='+', default=None,
+    #     help='labels for regions in plot, defautl: [None] auto')
+    # parser.add_argument('-sl', '--samplesLabel', nargs='+', default=None,
+    #     help='labels for samples in plot, default: [None] auto')
+    # parser.add_argument('-st', '--startLabel', default='TSS',
+    #     help='start label, default: [TSS]')
+    # parser.add_argument('-ed', '--endLabel', default='TES',
+    #     help='end label, default: [TES]')
+    # parser.add_argument('--refPointLabel', default='TSS',
+    #     help='refPointLabel label, default: [TSS]')
+    # parser.add_argument('--yMin', type=float, default=None,
+    #     help='Minimum value for the Y-axis')
+    # parser.add_argument('--yMax', type=float, default=None,
+    #     help='Maximum value for the Y-axis')
+    # parser.add_argument('--perGroup', action='store_true',
+    #     help='plot all samples by group')
+    # parser.add_argument('-p', dest='numberOfProcessors', type=int, default=4, 
+    #     help='number of processors, default: [4]')
+    # parser.add_argument('-O', '--overwrite', dest='overwrite', action='store_true',
+    #     help='Overwrite output file')
     return parser
 
 
