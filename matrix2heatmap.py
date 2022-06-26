@@ -52,7 +52,7 @@ class Matrix2heatmap(object):
             'alpha', 'zMin', 'zMax', 'yMin', 'yMax', 'heatmapHeight', 
             'heatmapWidth', 'whatToShow', 'labelRotation', 
             'kmeans', 'hclust', 'silhouette', 'sortUsingSamples',
-            'clusterUsingSamples', 'missingDataColor', 'linesAtTickMarks',
+            'clusterUsingSamples', 'missingDataColor',
             'boxAroundHeatmaps', 'interpolationMethod', 'dpi'
         ]
         return alist
@@ -107,6 +107,7 @@ class Matrix2heatmap(object):
 
     def update_colors(self):
         """
+        colors: 
         colorMap: Reds Blues
         colorList: white,red white,yellow,blue
         colorNumber: int
@@ -117,6 +118,12 @@ class Matrix2heatmap(object):
             self.colorList = ' '.join(self.colorList)
         if not isinstance(self.colorNumber, int):
             self.colorNumber = None
+        # update colors: add " " to color names
+        if isinstance(self.colors, list):
+            self.colors = ' '.join(self.colors)
+        if isinstance(self.colors, str):
+            cc = ['"{}"'.format(i) for i in self.colors.split()]
+            self.colors = ' '.join(cc)
 
 
     def init_files(self):
@@ -141,15 +148,17 @@ class Matrix2heatmap(object):
 
     def get_cmd(self):
         """
-        construct arguments to command line
+        construct arguments to command line:
+        ['perGroup', 'linesAtTickMarks']
         """
         alist = self.basic_args()
         # args = self.__dict__.copy() #
         args = {i:getattr(self, i, None) for i in alist}
         dlist = ['--{} {}'.format(k, v) for k,v in args.items() if v is not None]
+        bb = ['perGroup', 'linesAtTickMarks'] # no arguments
+        bba = ['--'+i for i in bb if getattr(self, i, None)]
+        dlist += bba # add arguments
         dline = ' '.join(dlist) # to cmd line
-        if self.perGroup:
-            dline += ' --perGroup'
         # main args
         cmd = ' '.join([
             '{}'.format(shutil.which('plotHeatmap')),

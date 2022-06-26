@@ -121,6 +121,12 @@ class Matrix2profile(object):
         """
         if isinstance(self.colors, list):
             self.colors = ' '.join(self.colors)
+        # update colors: add " " to color names
+        if isinstance(self.colors, list):
+            self.colors = ' '.join(self.colors)
+        if isinstance(self.colors, str):
+            cc = ['"{}"'.format(i) for i in self.colors.split()]
+            self.colors = ' '.join(cc)
 
 
     def init_files(self):
@@ -143,15 +149,17 @@ class Matrix2profile(object):
     def get_cmd(self):
         """
         construct arguments to command line
+
         """
         alist = self.basic_args()
         # args = self.__dict__.copy() #
         args = {i:getattr(self, i, None) for i in alist}
         # args = {k:'"{}"'.format(v) if isinstance(v, str) else v for k,v in args.items()} # string to ""
         dlist = ['--{} {}'.format(k, v) for k,v in args.items() if v is not None]
+        bb = ['perGroup'] # no arguments
+        bba = ['--'+i for i in bb if getattr(self, i, None)]
+        dlist += bba # add arguments
         dline = ' '.join(dlist) # to cmd line
-        if self.perGroup:
-            dline += ' --perGroup'
         # main args
         cmd = ' '.join([
             '{}'.format(shutil.which('plotProfile')),

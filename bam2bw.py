@@ -194,6 +194,10 @@ class Bam2bw_ns(object):
     def run(self):
         with open(self.bw_cmd, 'wt') as w:
             w.write(self.cmd+'\n')
+        # bam index
+        bai = self.bam + '.bai'
+        if not os.path.exists(bai):
+            pysam.index(self.bam)
         # run
         if os.path.exists(self.bw) and not self.overwrite:
             # if re-cal required, remove the old file
@@ -308,6 +312,10 @@ class Bam2bw_ss(object):
 
     def run(self):
         sf, sr = self.get_bam_scale(self.bam)
+        # bam index
+        bai = self.bam + '.bai'
+        if not os.path.exists(bai):
+            pysam.index(self.bam)
         # forward
         args1 = self.__dict__.copy()
         args1.update({
