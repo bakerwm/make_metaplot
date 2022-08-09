@@ -1,160 +1,112 @@
 #!/usr/bin/env python
 #-*- encoding: utf-8 -*-
 """
-Drecated, see `cal_pausing_index.py` 
+Update TSS for genes by Pol II ChIP data
 
-Pick the strongest TSS for gene, with multiple TSSs
-criteria
-- the strongest RNAP2 ChIP-seq signal (TSS region: tss_up + tss_down)
-- the distal TSS, if multiple TSShave equal ChIP-seq sigals
-- H3K4me3 enrichment (ChIP/input) > 4 (optional) 
-
-input files:
-1. TSS annotation, (from ENSEMBL-BioMart, UCSC-TableBrowser,...), BED6 
-2. RNAP2 ChIP-seq (BAM), (Rbp1, ..., NOT S5P, S2P, ...)
-
-
-output files
-1. TSS region (BED6), single-base
+criteria: pick the "TSS" with the strongest Pol II ChIP signal
+arguments: gene_bed, tss_bed, bam, ...
 """
 
 
+from operator import truediv
 import os
 import sys
 import re
 import pathlib
 import argparse
+import pysam
+from datetime import datetime
 from xopen import xopen
 from hiseq.utils.featurecounts import FeatureCounts
-from hiseq.utils.bam import Bam
-# from hiseq.utils.utils import Config
-# from logging import raiseExceptions
+# from hiseq.utils.file import symlink_file
 
 
 def pick_tss(x, bam, **kwargs):
     """
+    Pick Top/Distal TSS
+
+    Parameters:
+    -----------
     x : str
         TSS records in BED6 format, see script "format_tss.py" for help
     bam : str
         The RNAP2 ChIP alignment file, to determine TSS site
     out_dir : str
         Directory to save final records
-    # y : str
-    #     The output TSS, only one for each gene
     tss_up : int
         TSS region, upstream of TSS, default: [150]
     tss_down : int
         TSS region, downstream of TSS, default: [150]
-    ...
+    kwargs
     """
-    print('> Pick the strongest TSS')
     args = {
-        'out_dir': None,
-        'tss_up': 150,
-        'tss_down': 150,
-        'name': None,
-        'overwrite': False,
+        'prefix': None,
+        'overwrite': False
     }
     args.update(kwargs)
-    # 1. prepare files
-    args['out_dir'] = fix_out_dir(args['out_dir'])
-    if not isinstance(args['name'], str):
-        args['name'] = os.path.basename(os.path.splitext(x)[0])
-    prefix = os.path.join(args['out_dir'], args['name']) 
-    tss_r = prefix+'.TSSR.{}_TSS_{}.bed'.format(args['tss_up'], args['tss_down'])
-    # 2. extract TSS region
-    get_tss_region(x, tss_r, args['tss_up'], args['tss_down'])
-    # 3. count reads on TSS regions
-    args['name'] = os.path.basename(os.path.splitext(tss_r)[0])
-    tss_fc = count_region(x=tss_r, bam=bam, **args)
-    # 4. pick TSS sites
-    tss_fix = os.path.join(os.path.dirname(tss_fc), args['name']+'.TSS_fixed.bed')
-    pick_distal_tss(tss_fc, tss_fix, args['overwrite'])
-    # 5. convert TSS to single-base BED format
-    tss_fix_new = recover_tss(tss_fix) # or retrieve from total TSS, by gene_name
-    return tss_fix_new
+    overwrite = args.get('overwrite', False)
+    # 1. extract TSS region
+    tss_f = get_tss_file(x, fmt='bed', **args)
+    # 2. count reads on TSS regions
+    args['prefix'] = os.path.basename(os.path.splitext(tss_f)[0]) # update name
+    tss_fc = count_region(x=tss_f, bam=bam, **args)
+    # 3. pick TSS sites
+    tss_top = pick_top_tss(tss_fc, overwrite)
+    # 4. convert TSS to single-base BED format
+    tss_top_fixed = recover_tss(tss_top) # retrieve from total TSS, by gene_name
+    # # 5. save top_tss to main directory
+    # tss = os.path.join(args['out_dir'], os.path.basename(tss_top_fixed))
+    # symlink_file(tss_top_fixed, tss)
+    return tss_top_fixed #_top_fixed
 
 
-def pick_distal_tss(x, y, overwrite=False):
+def pick_top_tss(x, overwrite=False):
     """
-    Pick the distal TSS for genes with multiple TSSs that equal in RNAP2 signal
-    choose if RNAP2 signal was zero
+    Pick Top/Distal TSS
 
+    Parameters:
+    -----------
     x : str
         otuput of featureCounts, read counts in column-7
     """
-    if os.path.exists(y) and overwrite is False:
-        print('pick_distal_tss() skipped, file exists.')
-        return None
+    x_new = os.path.splitext(x)[0]+'.top_TSS.bed'
+    if os.path.exists(x_new) and overwrite is False:
+        print('pick_distal_tss() skipped, file exists: {}'.format(x_new))
+        return x_new
     d = {}
     for p in load_fc(x):
-        # if float(p[-1]) == 0:
-        #     continue
-        g,_ = p[0].split(':', 1) # fix gene_name:tss
-        dg = d.get(g, [])
+        # dup gene names in multiple chromosome
+        g,c,_ = p[0].split(':', 2) # fix gene_name:tss
+        k = '{}:{}'.format(g,c) # gene+chr
+        dg = d.get(k, [])
         dg.append(p)
-        d.update({g:dg})
+        d.update({k:dg})
     # pick strongest tss
     print('Number of TSSs for gene: {}'.format(len(d)))
+    # choose top tss
     # choose distal tss, for multiple TSSs with equal counts
-    with open(y, 'wt') as w:
-        for g,fc in d.items():
+    with open(x_new, 'wt') as w:
+        for k,fc in d.items(): # k=gene+chr
+            g,c = k.split(':', 1)
             n = [float(i[6]) for i in fc] # count in column-7
-            max_idx = [i for i,j in enumerate(n) if j == max(n)] # max count
+            max_idx = [i for i,j in enumerate(n) if j == max(n)] # top TSS
             if len(max_idx) == 1:
                 max_fc = fc[max_idx[0]]
             else:
                 fc2 = [j for i,j in enumerate(fc) if i in max_idx]
-                max_fc = pick_distal_tss2(fc2)
+                max_fc = pick_distal_tss(fc2) # distal TSS
             # fix BED start, 0-index
             max_fc[2] = str(int(max_fc[2])-1) 
             t = max_fc[1:4]+[g, 254, max_fc[4]] # BED format
             t = list(map(str, t))
             w.write('\t'.join(t)+'\n')
-
-
-def recover_tss(x):
-    """
-    Recover the TSS region to TSS site
-    parse tss_up and tss_down from filename: ...TSSR.150_TSS_150.TSS_fixed.bed
-    
-    Parameters:
-    -----------
-    x : str
-        file, fixed TSS in BED format, see pick_distal_tss()
-        suffix: ".TSSR.150_TSS_150.TSS_fixed.bed"
-    
-    write the final results to file: ".TSS_fixed.bed"
-    """
-    if not os.path.exists(x):
-        print('file not exists: {}'.format(x))
-        sys.exit(1)
-    # check file name
-    p = re.compile('(\d+)_TSS_(\d+).TSS_fixed')
-    g = p.search(x)
-    if g is None:
-        print('x, expect [.150_TSS_150.TSS_fixed], got {}'.format(x))
-        sys.exit(1)
-    tss_up, tss_down = (int(g.group(1)), int(g.group(2)))
-    # new name
-    x_new = re.sub('TSSR.\d+_TSS_\d+\.', '', x, flags=re.IGNORECASE)
-    i = 0
-    with open(x_new, 'wt') as w, open(x) as r:
-        for l in r:
-            i += 1
-            p = l.strip().split('\t')
-            s,e = list(map(int, p[1:3])) # start, end
-            p[1], p[2] = (s+tss_up, e-tss_down) if p[5] == '+' else (s+tss_down, e-tss_up)
-            if p[1] >= p[2]:
-                p[1] = p[2] - 1 # one the edges
-                print('line-{}, illegal BED, {}'.format(i, x))
-            b = list(map(str, p))
-            w.write('\t'.join(b)+'\n')
     return x_new
 
 
-def pick_distal_tss2(x):
+def pick_distal_tss(x):
     """
+    Parameters:
+    -----------
     x : list
         list of featureCounts records, list of list
     determine the distal TSS
@@ -168,25 +120,108 @@ def pick_distal_tss2(x):
     return x[s.index(distal_s)]
 
 
-def get_tss_region(x, y, tss_up=0, tss_down=0):
+def recover_tss(x, overwrite=False):
+    """
+    Recover the TSS region to TSS site
+    parse tss_up and tss_down from filename: ...TSSR.150_TSS_150.top_TSS
+    Parameters:
+    -----------
+    x : str
+        file, fixed TSS in BED format, see pick_distal_tss()
+        suffix: ".TSSR.150_TSS_150.top_TSS"
+
+    # depict, how to define the TSS region
+    # genes on forward strand(+):
+                 TSS                                          TES    
+    (+)------------|----------------[gene]--------------------|--------->
+        |--tss_up--|--tss_down--|
+        (.......TSS rgion.......)
+
+    ## genes on reverse strand(-):
+                  TES                                        TSS    
+    (-)<-----------|----------------[gene]--------------------|-----------
+                                                 |--tss_down--|--tss_up--|
+                                                 (.......TSS rgion.......)
+    write the final results to file: ".TSS.bed"
+    """
+    g = re.search('\.TSSR\.(\d+)_TSS_(\d+)', x)
+    if g is None:
+        print('x, expect [.TSSR.150_TSS_150], got {}'.format(x))
+        sys.exit(1)
+    tss_up, tss_down = (int(g.group(1)), int(g.group(2)))
+    # new name
+    x_new = re.sub('.TSSR.\d+_TSS_\d+\.top_TSS', '.TSS', x, flags=re.IGNORECASE)
+    if os.path.exists(x_new) and overwrite is False:
+        print('recover_tss() skipped, file exists: {}'.format(x_new))
+        return x_new
+    i = 0
+    with open(x_new, 'wt') as w, open(x) as r:
+        for l in r:
+            i += 1
+            p = l.strip().split('\t')
+            s,e = list(map(int, p[1:3])) # start, end
+            s,e = (s+tss_up, e-tss_down) if p[5] == '+' else (s+tss_down, e-tss_up)
+            if s >= e:
+                s = e - 1 # on the edges
+                print('line-{}, illegal BED, {}, {}'.format(i, s, e))
+            p[1], p[2] = list(map(str, [s, e]))
+            w.write('\t'.join(p)+'\n')
+    return x_new
+
+
+def get_tss_file(x, fmt='bed', **kwargs):
     """
     Parameters:
     -----------
     x : str
-        TSS records in BED format, tss_start, tss_end, single base
-    y : str
-        output file, formated TSS record in BED6 
+        gene record in BED format, file
+    fmt : str
+        output format, [bed|gtf], default: [bed]
+    **kwargs 
+        see arguments in get_tss_region()
+        required: out_dir, tss_up, tss_down, name, overwrite
+    """
+    args = {
+        'out_dir': None,
+        'tss_up': 150,
+        'tss_down': 150,
+        'prefix': None,
+        'overwrite': False,
+    }
+    args.update(kwargs)
+    # update files
+    if not isinstance(args['prefix'], str):
+        args['prefix'] = os.path.basename(os.path.splitext(x)[0])
+    args['out_dir'] = fix_out_dir(args['out_dir'])
+    n = args['prefix']+'.TSSR.{}_TSS_{}'.format(args['tss_up'], args['tss_down'])
+    out = os.path.join(args['out_dir'], n+'.'+fmt)
+    # message
+    msg = 'TSS region: --[({}bp)--TSS--({}bp)]--'.format(args['tss_up'], args['tss_down'])
+    print(msg)
+    if os.path.exists(out) and args.get('overwrite', False) is False:
+        print('file exists: {}'.format(out))
+    else:
+        with xopen(out, 'wt') as w:
+            for b in get_tss_region(x, **args):
+                if fmt == 'gtf':
+                    b = bed2gtf(b, 'gene')
+                w.write('\t'.join(b)+'\n')
+    return out
+
+
+def get_tss_region(x, tss_up=150, tss_down=150, **kwargs):
+    """
+    Parameters:
+    -----------
+    x : str
+        gene records in BED6 format; gene record
     tss_up : int
-        TSS region, upstream of TSS, default: [0]
+        upstream border of TSS region, distance to TSS site, default: [150]
     tss_down : int
-        TSS region, downstream of TSS, default: [0]
-    # format TSS 
-    1. slop TSS region: tss_up, tss_down
-    # return
-    chr,tss-1,tss,gene_name,254,strand
+        downstream border of TSS region, distance to TSS site, default: [150]
     # depict, how to define the TSS region
     # genes on forward strand(+):
-                  TSS                                        TES    
+                 TSS                                          TES    
     (+)------------|----------------[gene]--------------------|--------->
         |--tss_up--|--tss_down--|
         (.......TSS rgion.......)
@@ -197,21 +232,89 @@ def get_tss_region(x, y, tss_up=0, tss_down=0):
                                                  |--tss_down--|--tss_up--|
                                                  (.......TSS rgion.......)
     """
-    with xopen(x) as r, xopen(y, 'wt') as w:
+    # print('!B-2', kwargs, type(tss_up), type(tss_down))
+    # is_valid_bed(x)
+    with xopen(x) as r:
         for l in r:
-            p = l.strip().split('\t')
-            s,e = list(map(int, p[1:3]))
-            # update start,end
-            s,e = (s-tss_up, e+tss_down) if p[5] == '+' else (s-tss_down, e+tss_up)
-            # fix start
-            # fix chr size, ! to-do
+            p = l.strip().split('\t') # BED6
+            if len(p) < 6:
+                continue
+            s,e = list(map(int, p[1:3])) # start, end
+            s,e = (s-tss_up, s+tss_down+1) if p[5] == '+' else (e-tss_down-1, e+tss_up)
             if s < 0:
-                s = 0
+                s = 0 # fix border
             b = [p[0], s, e] + p[3:6]
-            b = list(map(str, b))
-            if y.endswith('.gtf'):
-                b = bed2gtf(b, feature='gene')
-            w.write('\t'.join(b)+'\n')
+            yield list(map(str, b)) # return BED record
+
+
+# count reads on TSS region
+def count_region(x, bam, **kwargs):
+    """
+    Count reads on regions using featureCounts
+
+    Parameters:
+    -----------
+    x : str
+        gene record in BED/GTF format, file
+    bam : str
+        Alignment file of Pol II ChIP-seq
+    kwargs : optional arguments
+        required, out_dir, name, overwrite
+    """
+    args = {
+        'out_dir': None,
+        'prefix': None,
+        'overwrite': False,
+    }
+    args.update(kwargs)
+    # update files
+    args['out_dir'] = fix_out_dir(args['out_dir'])
+    bname = os.path.basename(os.path.splitext(bam)[0]) # bam name
+    args['out_dir'] = os.path.join(args['out_dir'], bname) # update subdir
+    if not isinstance(args['prefix'], str):
+        args['prefix'] = os.path.splitext(os.path.basename(x))[0]
+    # 1. gtf file
+    if x.endswith('.gtf'):
+        gtf = x
+    elif x.endswith('.bed'):
+        gtf = bed2gtf_file(x)
+    else:
+        sys.exit('unknown x={}'.format(x))
+    # 2. count genebody region
+    args_fc = {
+        'gtf': gtf,
+        'bam_list': bam,
+        'outdir': args['out_dir'],
+        'prefix': args['prefix']+'.txt',
+        'feature_type': 'gene',
+    }
+    # index bam file
+    if not os.path.exists(bam+'.bai'):
+        pysam.index(bam)
+    fc = FeatureCounts(**args_fc)
+    fc.run()
+    return fc.count_txt
+
+
+def load_fc(x):
+    with xopen(x) as r:
+        for l in r:
+            if l.startswith('#') or l.startswith('Geneid'):
+                continue
+            p = l.strip().split('\t')
+            yield p
+
+
+def fix_out_dir(x):
+    """
+    fix out_dir, if not "str", set "cwd()"
+    """
+    if not isinstance(x, str):
+        x = pathlib.Path.cwd()
+    x = os.path.abspath(x)
+    if not os.path.exists(x):
+        os.makedirs(x)
+    return x
 
 
 def bed2gtf(x, feature='gene'):
@@ -231,87 +334,44 @@ def bed2gtf(x, feature='gene'):
     return list(map(str, gtf))
 
 
-def fix_out_dir(x):
+def bed2gtf_file(x, y=None, feature='gene', overwrite=False):
     """
-    fix out_dir, if not "str", set "cwd()"
+    Convert BED file to GTF file
     """
-    if not isinstance(x, str):
-        x = pathlib.Path.cwd()
-    x = os.path.abspath(x)
-    if not os.path.exists(x):
-        os.makedirs(x)
-    return x
-
-
-## count reads on TSS region
-def count_region(x, bam, **kwargs):
-    """
-    Count reads on genebody region using featureCounts
-    x : str
-        gene record in BED/GTF format, file
-    kwargs : optional arguments
-        required, out_dir, name, overwrite
-    """
-    args = {
-        'out_dir': None,
-        'name': None,
-        'overwrite': False,
-    }
-    args.update(kwargs)
-    args['out_dir'] = fix_out_dir(args['out_dir'])
-    bname = os.path.basename(os.path.splitext(bam)[0]) # bam name
-    args['out_dir'] = os.path.join(args['out_dir'], bname)
-    if not isinstance(args['name'], str):
-        args['name'] = os.path.splitext(os.path.basename(x))[0]
-    # 1. get gtf file
-    if x.endswith('.gtf'):
-        gtf = x
-    elif x.endswith('.bed'):
-        gtf = x.replace('.bed', '.gtf')
-        with open(x) as r, open(gtf, 'wt') as w:
+    # output file
+    if isinstance(y, str):
+        y = os.path.abspath(y)
+        out_dir = os.path.dirname(y)
+    else:
+        x = os.path.abspath(x)
+        out_dir = os.path.dirname(x)
+        y = os.path.splitext(x)[0] + '.gtf'
+    out_dir = fix_out_dir(out_dir)
+    # run
+    if os.path.exists(y) and overwrite is False:
+        print('file exists: {}'.format(y))
+    else:
+        with open(x) as r, open(y, 'wt') as w:
             for l in r:
                 p = l.strip().split('\t')
                 g = bed2gtf(p, feature='gene')
                 w.write('\t'.join(g)+'\n')
-    else:
-        sys.exit('unknown x={}'.format(x))
-    # 2. count genebody region
-    args_fc = {
-        'gtf': gtf,
-        'bam_list': bam,
-        'outdir': args['out_dir'],
-        'prefix': args['name']+'.txt',
-        'feature_type': 'gene',
-    }
-    # index bam file
-    Bam(bam).index()
-    fc = FeatureCounts(**args_fc)
-    fc.run()
-    return fc.count_txt
-
-
-def load_fc(x):
-    with xopen(x) as r:
-        for l in r:
-            if l.startswith('#') or l.startswith('Geneid'):
-                continue
-            p = l.strip().split('\t')
-            yield p
+    return y
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', dest='bed', required=True, 
+    parser.add_argument('-t', '--tss-bed', dest='tss_bed', required=True, 
         help='The TSS record in BED6 format, see "format_tss.py" for help')
-    parser.add_argument('-b', '--bam', dest='bam', required=True,
-        help='bam file, sorted and indexed')
+    parser.add_argument('-b', '--tss-bam', dest='tss_bam', required=False,
+        help='The alignemnt file of Pol2 ChIP, in BAM format')
     parser.add_argument('-o', dest='out_dir', required=False, 
         help='The out_dir')
     parser.add_argument('-u', '--tss-up', dest='tss_up', type=int,
         default=150, help='for TSS region, upstream of TSS, default: [150]')
     parser.add_argument('-d', '--tss-down', dest='tss_down', type=int,
         default=150, help='for TSS region, downstream of TSS, default: [150]')
-    parser.add_argument('-n', '--name', dest='name', type=str,
+    parser.add_argument('-n', '--name', dest='prefix', type=str,
         default=None, help='name of the output files, default: [auto]')
     parser.add_argument('-O', '--overwrite', action='store_true',
         help='Overwrite exists file')
@@ -320,9 +380,10 @@ def get_args():
 
 def main():
     args = vars(get_args().parse_args())
-    bed = args.pop('bed')
-    bam = args.pop('bam')
-    pick_tss(bed, bam, **args)
+    # gene = args.pop('gene_bed')
+    tss_bed = args.pop('tss_bed', None)
+    tss_bam = args.pop('tss_bam', None)
+    pick_tss(tss_bed, tss_bam, **args)
 
 
 if __name__ == '__main__':
