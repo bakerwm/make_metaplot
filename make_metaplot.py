@@ -32,6 +32,7 @@ Antisense: bigWig(fwd) gene(-); bigWig(fwd) gene(+)
 
 import os
 import argparse
+from pathlib import Path
 from bam2profile import Bam2profile
 from bam2heatmap import Bam2heatmap
 from bw2profile import Bw2profile
@@ -72,14 +73,17 @@ def func_to_plot(plot_type='profile', **kwargs):
             'bam_list': None,
         })
     # elif is_valid_file(bf, is_valid_bigwig) and is_valid_file(br, is_valid_bigwig):
-    elif is_valid_file([bf, br], is_valid_bigwig):
-        fun1 = Bw2profile
-        fun2 = Bw2heatmap
-        args.update({
-            'matrix': None,
-            'bw_list': None,
-            'bam_list': None,
-        })
+    elif isinstance(bf, list) and isinstance(bf, list):
+        if is_valid_file(bf+br, is_valid_bigwig):
+            fun1 = Bw2profile
+            fun2 = Bw2heatmap
+            args.update({
+                'matrix': None,
+                'bw_list': None,
+                'bam_list': None,
+            })
+        else:
+            fun1 = fun2 = None
     elif is_valid_file(bw, is_valid_bigwig):
         fun1 = Bw2profile
         fun2 = Bw2heatmap
@@ -164,7 +168,7 @@ def main():
     else:
         d1 = load_yaml(args.config) # i/o config
         if not isinstance(d1, dict):
-            log.error('Coult not read config file: {}'.format(args.config))
+            log.error('Could not read config file: {}'.format(args.config))
             return None # skipped
         args_init.update(d1)
         fun1, args1 = func_to_plot('profile', **args_init) # for profile
@@ -177,6 +181,13 @@ def main():
         print(msg)
         fun1(**args1).run()
         fun2(**args2).run()
+        # make profile, using R
+        path = Path(__file__).parent.absolute()
+        mx = os.path.join(path, "make_metaplot_r.R")
+        cmd = 'Rscript {} {}'.format(mx, args.config)
+        os.system(cmd)
+        
+        
 
     # # make sure config.yaml file
     # if not isinstance(args['config'], str):

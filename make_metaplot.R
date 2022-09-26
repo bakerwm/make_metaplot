@@ -8,11 +8,72 @@ library(ggplot2)
 
 
 
+#------------------------------------------------------------------------------#
+# read yaml file
+# expect output files
+# 2.bw2matrix
+# 3.matrxi2profile
+# 4.matrix2heatmap
+# 5.matrix2profile_R
+
+#' Generate default arguments for metaplot
+#' 
+#' default arguments for all profile
+.metaplot_args <- function(...) {
+  # default arguments
+  args <- list(
+    avg_func      = "mean",
+    colors        = NULL, # auto
+    dpi           = 300,
+    end_label     = "TES",
+    height        = 3,
+    linesAtTickMarks = FALSE,
+    out_dir       = "results/fig1_metaplot",
+    overwrite     = FALSE,
+    perGroup      = TRUE,
+    plotHeight    = 8,
+    ploWidth      = 12,
+    plot_theme    = NULL, # default: theme_bw()
+    plotTitle     = "metaplot",
+    plotType      = "lines",
+    point_label   = "TSS",  # same as start label
+    prefix        = NULL,
+    refPointLabel = "TSS",
+    referencePoint = "TSS",
+    return_data   = FALSE, # return data.frame
+    sample_labels = NULL, # default
+    sample_list   = NULL,
+    startLabel    = "TSS",
+    units         = "in",
+    width         = 7,
+    x_title       = "Genomic region (kb)",
+    y_max         = NULL, # auto
+    y_min         = NULL, # auto
+    y_title       = "score"
+  )
+  dots <- rlang::list2(...)
+  purrr::update_list(args, !!!dots)
+}
+
+
 #' see `computeMatrix` of deeptools at
 #' https://deeptools.readthedocs.io/en/develop/content/tools/plotProfile.html
 #'
-#' @param x path to the matrix file
+#' @param x Character path to the matrix file
+#' @param header_only bool return the head only
 #'
+#' 
+#' sl # sample_labels
+#' ss # list of sample_labels
+#' x_axis   = x_axis,
+#' x_ticks  = x_ticks,
+#' x_labels = x_labels,
+#' x_title  = x_title,
+#' y_title  = y_title,
+#' x_sect   = x_sect
+#'
+#'
+#' @export
 .read_matrix_header <- function(x) {
   h <- readLines(x, n = 1)
   j <- jsonlite::parse_json(gsub("^@", "", h))
@@ -103,6 +164,7 @@ library(ggplot2)
   tibble::tibble(score = score, label = header$ss, x = header$x_axis) %>%
     dplyr::mutate(label = factor(label, levels = header$sl))
 }
+
 
 
 #' Generate metaplot for regions/reference-point
@@ -260,6 +322,9 @@ plot_profile_ss <- function(x1, x2, ...) {
   # 1. :auto-define y-axis, range
   ymax <- max(p1$data$score, p2$data$score)
   ymin <- min(p1$data$score, p2$data$score)
+  if(inherits(args[["ymax"]], "numeric")) {
+    ymax <- args[["ymax"]]
+  }
   # 2. :fix sense (on top)
   p1 <- p1 +
     scale_y_continuous(
@@ -427,7 +492,7 @@ plot_profile2 <- function(m, filename = NULL, ...) {
     ))
     return(NULL)
   }
-
+  
   #----------------------------------------------------------------------------#
   # 2. parse header
   #' parse the header from matrix file
@@ -498,7 +563,7 @@ plot_profile2 <- function(m, filename = NULL, ...) {
     if(rlang::is_empty(name)) next
     assign(name, header[[name]])
   }
-
+  
   #----------------------------------------------------------------------------#
   # 2. load matrix
   .load_matrix <- function(f) {
@@ -531,7 +596,7 @@ plot_profile2 <- function(m, filename = NULL, ...) {
       list(df = df, plot_title = plot_title, colors = colors)
     ))
   }
-
+  
   #----------------------------------------------------------------------------#
   # 3. plot
   ## 3.1 basic plot
@@ -551,7 +616,7 @@ plot_profile2 <- function(m, filename = NULL, ...) {
       labels = x_labels
     ) +
     ggtitle(plot_title)
-
+  
   ## 3.2 :colors
   if(inherits(colors, "character")) {
     # valid colors !!!
@@ -559,13 +624,13 @@ plot_profile2 <- function(m, filename = NULL, ...) {
     p <- p +
       scale_color_manual(values = colors)
   }
-
+  
   ## 3.3 :yaxis
   if(inherits(c(y_min,y_max), "numeric")) {
     p +
       scale_y_continuous(limits = c(y_min, y_max))
   }
-
+  
   ## 3.4 :theme
   if(inherits(plot_theme, "character")) {
     if(plot_theme %in% c("few")) {
@@ -578,7 +643,7 @@ plot_profile2 <- function(m, filename = NULL, ...) {
       ggplot2::theme_bw() +
       theme(panel.grid = element_blank())
   }
-
+  
   #----------------------------------------------------------------------------#
   # 4. save to files
   if(inherits(filename, "character")) {
@@ -633,19 +698,19 @@ combine_profile2 <- function(f1, f2, colors = NULL, ...) {
   # load data
   df1 <- plot_profile(f1, return_data = T, ...)
   df2 <- plot_profile(f2, return_data = T, ...)
-
+  
   # fix anti/sens
   df <- dplyr::bind_rows(
     dplyr::mutate(df1$df, label = paste0(label, ":sens")),
     dplyr::mutate(df2$df, label = paste0(label, ":anti"), score = -score)
   )
-
+  
   # fix levels
   v <- levels(df1$df$label)
   v <- c(paste0(v, ":sens"), paste0(v, ":anti"))
   df <- df %>%
     dplyr::mutate(label = factor(label, levels = v))
-
+  
   # common variables
   p <- ggplot(df, aes(x, score, color = label)) +
     geom_vline(xintercept = df1$x_sect, size = .5, color = "grey50", linetype = 2) +
@@ -664,7 +729,7 @@ combine_profile2 <- function(f1, f2, colors = NULL, ...) {
              y = c(-0.03, 0.03),
              label = c("antisense", "sense"),
              hjust = 1)
-
+  
   # fix colors
   if(inherits(colors, "character")) {
     colors2 <- rep(colors, 2)
@@ -673,6 +738,142 @@ combine_profile2 <- function(f1, f2, colors = NULL, ...) {
   p
 }
 
+
+
+
+
+
+
+#------------------------------------------------------------------------------#
+# tmp func
+#
+#' 
+#' #------------------------------------------------------------------------------#
+#' #' see `computeMatrix` of deeptools at
+#' #' https://deeptools.readthedocs.io/en/develop/content/tools/plotProfile.html
+#' #'
+#' #' @param x path to the matrix file
+#' #'
+#' .read_matrix_header <- function(x) {
+#'   h <- readLines(x, n = 1)
+#'   j <- jsonlite::parse_json(gsub("^@", "", h))
+#'   ## 1.1 sample labels (bw files)
+#'   sr1 <- unlist(j$sample_boundaries)
+#'   sr  <- tail(sr1, -1) - head(sr1, -1)
+#'   sl  <- unlist(j$sample_labels) # !!! save order
+#'   ss  <- rep(sl, sr) # labels, global variable
+#'   #-------------------------#
+#'   # # update sample_labeles, from global_env
+#'   # if(inherits(sample_labels, "character")) {
+#'   #   if(length(s) == length(sample_labels)) {
+#'   #     s <- sample_labels
+#'   #   }
+#'   # }
+#'   #-------------------------#
+#'   ## 1.2 x-axis, labels
+#'   ## to-do: unscaled 5 prime: !!!
+#'   ## up, TSS, TES, down
+#'   us <- ifelse(rlang::has_name(j, "upstream"), j$upstream[[1]], 0)
+#'   gb <- ifelse(rlang::has_name(j, "body"), j$body[[1]], 1000)
+#'   ds <- ifelse(rlang::has_name(j, "downstream"), j$downstream[[1]], 0)
+#'   bs <- ifelse(rlang::has_name(j, "bin size"), j$`bin size`[[1]], 10)
+#'   u5 <- ifelse(rlang::has_name(j, "unscaled 5 prime"), j$`unscaled 5 prime`[1], 0)
+#'   u3 <- ifelse(rlang::has_name(j, "unscaled 3 prime"), j$`unscaled 3 prime`[1], 0)
+#'   ## lables on x axis
+#'   usl <- paste0("-", round(us / 1000, 1))
+#'   dsl <- paste0("+", round(ds / 1000, 1))
+#'   ## x-tick labels
+#'   if(rlang::has_name(j, "ref point")) {
+#'     ref <- j$`ref point`[[1]]
+#'   } else {
+#'     ref <- NULL
+#'   }
+#'   if(is.null(ref)) {
+#'     start_label <- "TSS"
+#'     end_label   <- "TES"
+#'     x_labels <- c(usl, start_label, end_label, dsl)
+#'     x_list      <- c(us, gb, ds) / bs
+#'     # x_ticks  <- Reduce(f = "+", x = c(us, gb, ds) / bs, accumulate = TRUE)
+#'   } else {
+#'     start_label <- NULL
+#'     end_label   <- NULL
+#'     x_labels <- c(usl, ref, dsl)
+#'     x_list      <- c(us, ds) / bs
+#'     # x_ticks  <- Reduce(f = "+", x = c(us, ds) / bs, accumulate = TRUE)
+#'   }
+#'   # ref <- switch(is.null(a)+1,"notNullHihi",NULL)
+#'   x_ticks  <- Reduce(f = "+", x = x_list, accumulate = TRUE) # add 0
+#'   x_ticks  <- c(0, x_ticks)
+#'   ## 1.3 Axis, labels
+#'   x_axis   <- unlist(lapply(sr, seq))
+#'   # x_ticks  <- Reduce(f = "+", x = c(us, gb, ds) / bs, accumulate = TRUE) # add 0
+#'   # x_ticks  <- c(0, x_ticks)
+#'   # x_labels <- c(usl, start_label, end_label, dsl)
+#'   x_title  <- "Genomic region (kb)"
+#'   y_title  <- "Mean of score"
+#'   x_sect   <- head(x_ticks, -1) %>% tail(-1) # TSS, TES
+#'   # print(paste0("!AAAA-1", f, x_ticks))
+#'   # return values
+#'   list(
+#'     sl = sl,   # sample_labels
+#'     ss = ss,  # list of sample_labels
+#'     x_axis   = x_axis,
+#'     x_ticks  = x_ticks,
+#'     x_labels = x_labels,
+#'     x_title  = x_title,
+#'     y_title  = y_title,
+#'     x_sect   = x_sect
+#'   )
+#'   # x_sect, x_title, x_ticks, x_labels, plot_title, s, colors, y_min, y_max, plot_theme
+#' }
+#' 
+#' 
+#' #----------------------------------------------------------------------------#
+#' # 2. load matrix
+#' .read_matrix <- function(x, avg_func="mean") {
+#'   ## 2.1 load file
+#'   df1 <- read.delim(x, header = FALSE, sep = "\t", comment.char = "@")
+#'   ma  <- df1 %>%
+#'     dplyr::select(-c(1:6)) %>%
+#'     as.matrix
+#'   ## 2.2 load header
+#'   header <- .read_matrix_header(x)
+#'   ## 2.2 meta data
+#'   # "mean", "median", "min", "max", "sum" and "std"; default: [mean]
+#'   score <- apply(ma, 2, match.fun(avg_func))
+#'   tibble::tibble(score = score, label = header$ss, x = header$x_axis) %>%
+#'     dplyr::mutate(label = factor(label, levels = header$sl))
+#' }
+#' 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#------------------------------------------------------------------------------#
+# deprecated
 
 # f <- "TTseq_YY122.anti.mat.gz"
 # a <- plot_profile(f, "abc.png", overwrite = T, return_data = T)
