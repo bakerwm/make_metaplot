@@ -16,7 +16,7 @@ suppressPackageStartupMessages(library(hiseqr))
 #' to reverse the strand
 #'
 #' @export
-make_metaplot <- function(x, reverse_strand = FALSE, ...) {
+make_metaplot <- function(x, ...) {
   # 1. load config
   j <- tryCatch(
     {
@@ -34,6 +34,7 @@ make_metaplot <- function(x, reverse_strand = FALSE, ...) {
     return(NULL)
   }
   # 3. check args
+  j$reverse_strand <- FALSE # default
   dots <- rlang::list2(...)
   args <- purrr:::update_list(j, !!!dots)
   # args <- purrr::discard(args, is.null) # why?
@@ -56,7 +57,7 @@ make_metaplot <- function(x, reverse_strand = FALSE, ...) {
     dir.create(sub_dir)
   }
   if(file.exists(mat_sens) & file.exists(mat_anti)) {
-    if(isTRUE(reverse_strand)) {
+    if(isTRUE(args$reverse_strand)) {
       m1 <- mat_anti
       m2 <- mat_sens
     } else {
@@ -125,6 +126,15 @@ matrix2profile <- function(x, filename = NULL, ...) {
   }
   # load matrix data.frame
   df <- load_matrix(x, args$avg_func) # avg_func: default args
+  if(inherits(args$choose_samples, "character")) {
+    df <- dplyr::filter(df, label %in% args$choose_samples)
+    msg <- paste(args$choose_samples, collapse = ",")
+    if(nrow(df) == 0) {
+      message(glue::glue("no samples found in matrix: {msg}"))
+      return(NULL)
+    }
+  }
+  if(is.numeric(df))
   # check arguments
   if(isTRUE(args$return_data)) { # return_data: default args
     return(c(
@@ -223,7 +233,8 @@ matrix2profile <- function(x, filename = NULL, ...) {
 #'
 #' @export
 matrix2profile2 <- function(x1, x2, filename = NULL, ...) {
-  dots <- rlang::list2(...)
+  dots   <- .metaplot_args(...)
+  # dots <- rlang::list2(...)
   args <- list(
     colors    = NULL,
     ss_colors = FALSE
@@ -330,6 +341,7 @@ matrix2profile2 <- function(x1, x2, filename = NULL, ...) {
     refPointLabel = "TSS",
     referencePoint = "TSS",
     return_data   = FALSE, # return data.frame
+    reverse_strand = FALSE, 
     sample_labels = NULL, # default
     sample_list   = NULL,
     startLabel    = "TSS",

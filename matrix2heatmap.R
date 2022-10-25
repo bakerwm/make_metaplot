@@ -8,7 +8,7 @@ suppressPackageStartupMessages(library(hiseqr))
 source("/data/biosoft/make_metaplot/matrix2profile.R") # main functions
 
 
-f <- "results/paused_all/fig1_metaplot/2.bw2matrix/fig1.A.CnT_4H8.genebody.mat.gz"
+# f <- "results/paused_all/fig1_metaplot/2.bw2matrix/fig1.A.CnT_4H8.genebody.mat.gz"
 # 
 # df <- load_matrix(f, avg_func = FALSE)
 # 

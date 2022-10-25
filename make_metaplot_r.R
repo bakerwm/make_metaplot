@@ -24,5 +24,6 @@ suppressPackageStartupMessages(library(ggthemes))
 source("/data/biosoft/make_metaplot/matrix2profile.R") # main functions
 
 p <- make_metaplot(cfg)
+# p <- make_metaplot(cfg, overwrite = T, choose_samples = "t2_rep2", colors = c("blue"))
 
 ## END

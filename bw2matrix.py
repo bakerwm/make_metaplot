@@ -140,7 +140,7 @@ class Bw2matrix_ns(object):
         # 1. samplesLabel
         if isinstance(self.samplesLabel, list):
             k1 = len(self.samplesLabel) == len(self.bw_list) # !!!
-            self.samplesLabel = ['"{}"' for i in self.samplesLabel] # !!!
+            # self.samplesLabel = ['"{}"' for i in self.samplesLabel] # !!!
             self.samplesLabel = ' '.join(self.samplesLabel)
 
 
