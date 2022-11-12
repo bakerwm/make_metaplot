@@ -24,6 +24,7 @@ $ computeMatrix reference-point \
 
 
 import os
+import re
 # import sys
 # import pathlib
 import argparse
@@ -35,6 +36,7 @@ from utils import (
     load_matrix, log
 )
 from parse_args import add_io_parser, add_bw_parser, get_bw_args
+
 
 class Bw2matrix(object):
     def __init__(self, **kwargs):
@@ -138,9 +140,10 @@ class Bw2matrix_ns(object):
         1. samplesLabel
         """
         # 1. samplesLabel
+        p = re.compile('^".*"$')
         if isinstance(self.samplesLabel, list):
             k1 = len(self.samplesLabel) == len(self.bw_list) # !!!
-            # self.samplesLabel = ['"{}"' for i in self.samplesLabel] # !!!
+            self.samplesLabel = [f'"{i}"' for i in self.samplesLabel if p.match(i) is None] # !!!
             self.samplesLabel = ' '.join(self.samplesLabel)
 
 
@@ -284,6 +287,7 @@ class Bw2matrix_ss(object):
         mh = load_matrix(m, header_only=True)
         sl = mh.get('sample_labels', [])
         rl = mh.get('group_labels', [])
+        # update samples
         if isinstance(samples, list) and isinstance(groups, list):
             if all([i in sl for i in samples]) and all([i in rl for i in groups]):
                 pass
@@ -292,6 +296,9 @@ class Bw2matrix_ss(object):
         else:
             raise ValueError('sampels, groups not found in matrix')
         #
+        samples = [f'"{i}"' for i in samples]
+        groups = [f'"{i}"' for i in groups]
+        # print('!A-3', samples)
         cmd = ' '.join([
             '{} subset'.format(shutil.which('computeMatrixOperations')),
             '--samples {}'.format(' '.join(samples)),
@@ -319,8 +326,8 @@ class Bw2matrix_ss(object):
     def run(self):
         rf_fwd, rf_rev = self.split_region_files()
         # update labels
-        sl_fwd = [i+'_fwd' for i in self.samplesLabel] # samplesLabel
-        sl_rev = [i+'_rev' for i in self.samplesLabel] # samplesLabel
+        sl_fwd = [f'{i}_fwd' for i in self.samplesLabel] # samplesLabel
+        sl_rev = [f'{i}_rev' for i in self.samplesLabel] # samplesLabel
         rl_fwd = [os.path.basename(i) for i in rf_fwd] # regionsLabel
         rl_rev = [os.path.basename(i) for i in rf_rev] # regionsLabel
         # run for all
@@ -331,6 +338,7 @@ class Bw2matrix_ss(object):
             'samplesLabel': sl_fwd + sl_rev,
             'regionsLabel': rl_fwd + rl_rev,
         })
+        # print('!A-1', args['bw_list'])
         b2m = Bw2matrix_ns(**args)
         b2m.run()
         # sense: bw_fwd+region_fwd
