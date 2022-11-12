@@ -288,7 +288,7 @@ def add_plot_parser(parser):
     if not isinstance(parser, argparse.ArgumentParser):
         log.error('unknown parser')
         return None
-    parser.add_argument('-mx', dest='matrix', required=False,
+    parser.add_argument('-mx', dest='matrix', required=True,
         help='matrix file, by computeMatrix ')
     parser.add_argument('--plotType', default='lines',
         choices=['lines', 'fill', 'se', 'std', 'overlapped_lines', 'heatmap'],

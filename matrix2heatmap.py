@@ -5,6 +5,7 @@ Generate heatmap
 """
 
 import os
+import re
 import pathlib
 import argparse
 import shutil
@@ -79,6 +80,7 @@ class Matrix2heatmap(object):
         4. plotTitle, legendLocation
         """
         # load matrix
+        p = re.compile('^".*"$') # quoted labels
         mh = load_matrix(self.matrix, header_only=True)
         mh_sl = mh.get('sample_labels', [None])
         mh_rl = mh.get('group_labels', [None])
@@ -87,10 +89,12 @@ class Matrix2heatmap(object):
         if isinstance(self.samplesLabel, list):
             k1 = len(self.samplesLabel) == len(mh_sl)
             # raise error
+            self.samplesLabel = [f'"{i}"' for i in self.samplesLabel if p.match(i) is None] # !!!
             self.samplesLabel = ' '.join(self.samplesLabel)
         if isinstance(self.regionsLabel, list):
             k2 = len(self.regionsLabel) == len(mh_rl)
             # raise error
+            self.regionsLabel = [f'"{i}"' for i in self.regionsLabel if p.match(i) is None] # !!!
             self.regionsLabel = ' '.join(self.regionsLabel)
         # 2. startLabel, endLabel or refPointLabel
         if is_refPoint:
@@ -103,6 +107,9 @@ class Matrix2heatmap(object):
         if isinstance(self.yAxisLabel, str):
             self.yAxisLabel = '"{}"'.format(self.yAxisLabel)
         # 4. plotTitle, legendLocation
+        if isinstance(self.plotTitle, str):
+            if p.match(self.plotTitle) is None:
+                self.plotTitle = f'"{self.plotTitle}"'
 
 
     def update_colors(self):

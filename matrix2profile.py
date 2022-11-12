@@ -18,6 +18,7 @@ $ plotProfile \
 """
 
 import os
+import re
 # import pathlib
 import argparse
 import shutil
@@ -26,7 +27,7 @@ from utils import (
     make_config, update_obj, dump_yaml, file_abspath, file_prefix, log, 
     load_matrix, fix_out_dir, 
 )
-from parse_args import  add_plot_parser, get_plot_args
+from parse_args import add_io_parser, add_plot_parser, get_plot_args
 
 
 class Matrix2profile(object):
@@ -89,6 +90,7 @@ class Matrix2profile(object):
         4. plotTitle, legendLocation
         """
         # load matrix
+        p = re.compile('^".*"$') # quoted labels
         mh = load_matrix(self.matrix, header_only=True)
         mh_sl = mh.get('sample_labels', [None])
         mh_rl = mh.get('group_labels', [None])
@@ -97,10 +99,12 @@ class Matrix2profile(object):
         if isinstance(self.samplesLabel, list):
             k1 = len(self.samplesLabel) == len(mh_sl)
             # raise error
+            self.samplesLabel = [f'"{i}"' for i in self.samplesLabel if p.match(i) is None] # !!!
             self.samplesLabel = ' '.join(self.samplesLabel)
         if isinstance(self.regionsLabel, list):
             k2 = len(self.regionsLabel) == len(mh_rl)
             # raise error
+            self.regionsLabel = [f'"{i}"' for i in self.regionsLabel if p.match(i) is None] # !!!
             self.regionsLabel = ' '.join(self.regionsLabel)
         # 2. startLabel, endLabel or refPointLabel
         if is_refPoint:
@@ -111,6 +115,9 @@ class Matrix2profile(object):
         if isinstance(self.yAxisLabel, str):
             self.yAxisLabel = '"{}"'.format(self.yAxisLabel)
         # 4. plotTitle, legendLocation
+        if isinstance(self.plotTitle, str):
+            if p.match(self.plotTitle) is None:
+                self.plotTitle = f'"{self.plotTitle}"'
 
 
     def update_colors(self):
@@ -200,7 +207,9 @@ def get_args():
     parser = argparse.ArgumentParser(
         prog='bw2matrix.py', description='bw2matrix', epilog=example,
         formatter_class=argparse.RawTextHelpFormatter)
+    parser = add_io_parser(parser)
     parser = add_plot_parser(parser)
+    # parser = add_bw_parser(parser)
     # parser.add_argument('-m', dest='matrix', required=True,
     #     help='matrix file, by computeMatrix ')
     # parser.add_argument('-o', dest='out_dir', required=False,
