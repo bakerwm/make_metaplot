@@ -1,12 +1,6 @@
 
-
-# setwd("~/work/yu_2021/pcf11_lxj/results/20220110_pas_metaplot/deeptools/results/TTseq_YY122.anti")
 library(dplyr)
-# library(readr)
 library(ggplot2)
-
-
-
 
 #------------------------------------------------------------------------------#
 # read yaml file
@@ -17,7 +11,7 @@ library(ggplot2)
 # 5.matrix2profile_R
 
 #' Generate default arguments for metaplot
-#' 
+#'
 #' default arguments for all profile
 .metaplot_args <- function(...) {
   # default arguments
@@ -55,14 +49,16 @@ library(ggplot2)
   purrr::update_list(args, !!!dots)
 }
 
-
+# scale-regions
+x = '/data/yulab/wangming/work/yu_2022/projects/20221229_dlj_ChrRNA_yy218/results/flanking_genes/results/fig1.gs_6k/2.bw2matrix/fig1.ChrRNA_YY218.gs_6k_sens.mat.gz'
+# reference-point
+# x = '/data/yulab/wangming/work/yu_2022/projects/20221229_dlj_ChrRNA_yy218/results/flanking_genes/results/fig2.tss.gs_6k/2.bw2matrix/fig2.ChrRNA_YY218.gs_6k_anti.mat.gz'
 #' see `computeMatrix` of deeptools at
 #' https://deeptools.readthedocs.io/en/develop/content/tools/plotProfile.html
 #'
 #' @param x Character path to the matrix file
 #' @param header_only bool return the head only
 #'
-#' 
 #' sl # sample_labels
 #' ss # list of sample_labels
 #' x_axis   = x_axis,
@@ -72,26 +68,20 @@ library(ggplot2)
 #' y_title  = y_title,
 #' x_sect   = x_sect
 #'
-#'
 #' @export
 .read_matrix_header <- function(x) {
   h <- readLines(x, n = 1)
   j <- jsonlite::parse_json(gsub("^@", "", h))
-  ## 1.1 sample labels (bw files)
-  sr1 <- unlist(j$sample_boundaries)
-  sr  <- tail(sr1, -1) - head(sr1, -1)
-  sl  <- unlist(j$sample_labels) # !!! save order
-  ss  <- rep(sl, sr) # labels, global variable
-  #-------------------------#
-  # # update sample_labeles, from global_env
-  # if(inherits(sample_labels, "character")) {
-  #   if(length(s) == length(sample_labels)) {
-  #     s <- sample_labels
-  #   }
-  # }
-  #-------------------------#
-  ## 1.2 x-axis, labels
-  ## to-do: unscaled 5 prime: !!!
+  # 0. average type
+  bin_avg_type <- j$`bin avg type` # !!!
+  # 1. sample labels (bw files)
+  smp_labels <- unlist(j$sample_labels)
+  smp_bound  <- unlist(j$sample_boundaries)
+  # 2. group labels (region files)
+  group_labels <- unlist(j$group_labels)
+  group_bound  <- unlist(j$group_boundaries)
+  # 3. axis
+  y_title <- "Mean of score"
   ## up, TSS, TES, down
   us <- ifelse(rlang::has_name(j, "upstream"), j$upstream[[1]], 0)
   gb <- ifelse(rlang::has_name(j, "body"), j$body[[1]], 1000)
@@ -99,70 +89,81 @@ library(ggplot2)
   bs <- ifelse(rlang::has_name(j, "bin size"), j$`bin size`[[1]], 10)
   u5 <- ifelse(rlang::has_name(j, "unscaled 5 prime"), j$`unscaled 5 prime`[1], 0)
   u3 <- ifelse(rlang::has_name(j, "unscaled 3 prime"), j$`unscaled 3 prime`[1], 0)
-  ## lables on x axis
-  usl <- paste0("-", round(us / 1000, 1))
-  dsl <- paste0("+", round(ds / 1000, 1))
-  ## x-tick labels
-  if(rlang::has_name(j, "ref point")) {
-    ref <- j$`ref point`[[1]]
-  } else {
-    ref <- NULL
-  }
+  # x-axis ticks labels
+  # warnings: us or ds < 1000 ?
+  usl <- ifelse(any(c(us, ds) > 1000), paste0("-", round(us / 1000, 1)),
+                paste0("-", round(us, 0)))
+  dsl <- ifelse(any(c(us, ds) > 1000), paste0("+", round(ds / 1000, 1)),
+                paste0("+", round(ds, 0)))
+  x_title  <- ifelse(any(c(us, ds) > 1000), "Genomic region (kb)",
+                     "Genome region (bp)")
+  ## x ticks
+  ref <- j$`ref point`[[1]]
   if(is.null(ref)) {
-    start_label <- "TSS"
-    end_label   <- "TES"
-    x_labels <- c(usl, start_label, end_label, dsl)
-    x_list      <- c(us, gb, ds) / bs
-    # x_ticks  <- Reduce(f = "+", x = c(us, gb, ds) / bs, accumulate = TRUE)
+    matrix_type <- "scale-regions" # see deeptools.computeMatrix
+    x_labels <- c(usl, "TSS", "TES", dsl)
+    x_ticks  <- cumsum(round(c(0, us, gb, ds) / bs, 0))
   } else {
-    start_label <- NULL
-    end_label   <- NULL
+    matrix_type <- "reference-point" # see deeptools.computeMatrix
     x_labels <- c(usl, ref, dsl)
-    x_list      <- c(us, ds) / bs
-    # x_ticks  <- Reduce(f = "+", x = c(us, ds) / bs, accumulate = TRUE)
+    x_ticks  <- cumsum(round(c(0, us, ds) / bs, 0))
   }
-  # ref <- switch(is.null(a)+1,"notNullHihi",NULL)
-  x_ticks  <- Reduce(f = "+", x = x_list, accumulate = TRUE) # add 0
-  x_ticks  <- c(0, x_ticks)
-  ## 1.3 Axis, labels
-  x_axis   <- unlist(lapply(sr, seq))
-  # x_ticks  <- Reduce(f = "+", x = c(us, gb, ds) / bs, accumulate = TRUE) # add 0
-  # x_ticks  <- c(0, x_ticks)
-  # x_labels <- c(usl, start_label, end_label, dsl)
-  x_title  <- "Genomic region (kb)"
-  y_title  <- "Mean of score"
-  x_sect   <- head(x_ticks, -1) %>% tail(-1) # TSS, TES
-  # print(paste0("!AAAA-1", f, x_ticks))
-  # return values
-  list(
-    sl = sl,   # sample_labels
-    ss = ss,  # list of sample_labels
-    x_axis   = x_axis,
-    x_ticks  = x_ticks,
-    x_labels = x_labels,
-    x_title  = x_title,
-    y_title  = y_title,
-    x_sect   = x_sect
-  )
-  # x_sect, x_title, x_ticks, x_labels, plot_title, s, colors, y_min, y_max, plot_theme
+  # 4. output
+  # result <- list(bin_avg_type, smp_labels, smp_bound, group_labels, group_bound,
+  #                x_title, x_ticks, x_labels, y_title, matrix_type)
+  # return(result)
+  return(as.list(environment()))
 }
 
 
 #----------------------------------------------------------------------------#
 # 2. load matrix
 .read_matrix <- function(x, avg_func="mean") {
-  ## 2.1 load file
-  df1 <- read.delim(x, header = FALSE, sep = "\t", comment.char = "@")
-  ma  <- df1 %>%
-    dplyr::select(-c(1:6)) %>%
-    as.matrix
-  ## 2.2 load header
-  header <- .read_matrix_header(x)
-  ## 2.2 meta data
-  # "mean", "median", "min", "max", "sum" and "std"; default: [mean]
-  score <- apply(ma, 2, match.fun(avg_func))
-  tibble::tibble(score = score, label = header$ss, x = header$x_axis) %>%
-    dplyr::mutate(label = factor(label, levels = header$sl))
+  # 1. loading header
+  header   <- .read_matrix_header(x)
+  avg_func <- header$bin_avg_type
+  # 2. loading matrix
+  message(glue::glue("Loading matrix from file: {basename(x)}"))
+  df <- read.delim(x, header = FALSE, sep = "\t", comment.char = "@")
+  df1 <- subset(df, select = -c(1:6)) # remove bed6 record
+  hd_col <- max(header$smp_bound)
+  hd_row <- max(header$group_bound)
+  # check matrix size: col-row
+  if(! all(dim(df1) == c(hd_row, hd_col))) {
+    msg <- glue::glue("Error, expect matrix size [{dim(df)[1]}, {dim(df)[2]}]",
+                      ", actual matrix size is [{hd_row}, {hd_col}]")
+    warning(msg)
+    return(NULL)
+  }
+  # 3. split data.frame by sample-group
+  # to-do: split data.frame more elegantly/efficiently using base R functions?
+  df2 <- lapply(seq_len(length(header$smp_labels)), function(i) {
+    # choose the boundaries
+    smp_bd <- header$smp_bound
+    s1  <- smp_bd[i] + 1
+    s2  <- smp_bd[i + 1]
+    dfs <- subset(df1, select = c(s1:s2))
+    # return
+    lapply(seq_len(length(header$group_labels)), function(j) {
+      group_bd <- header$group_bound
+      g1  <- group_bd[j] + 1
+      g2  <- group_bd[j + 1]
+      dfg <- dfs[g1:g2, ]
+      ss <- data.frame(
+        row.names = NULL,
+        x     = seq_len(smp_bd[2]),
+        score = apply(dfg, 2, match.fun(avg_func)),
+        sample_label = header$smp_labels[i],
+        group_label  = header$group_labels[j]
+      )
+    }) %>%
+      dplyr::bind_rows()
+  }) %>%
+    dplyr::bind_rows()
+  # 4. fix order
+  df2$sample_label <- factor(df2$sample_label, levels = header$smp_labels)
+  df2$group_label  <- factor(df2$group_label, levels = header$group_labels)
+  df2
 }
 
 
@@ -492,7 +493,7 @@ plot_profile2 <- function(m, filename = NULL, ...) {
     ))
     return(NULL)
   }
-  
+
   #----------------------------------------------------------------------------#
   # 2. parse header
   #' parse the header from matrix file
@@ -563,7 +564,7 @@ plot_profile2 <- function(m, filename = NULL, ...) {
     if(rlang::is_empty(name)) next
     assign(name, header[[name]])
   }
-  
+
   #----------------------------------------------------------------------------#
   # 2. load matrix
   .load_matrix <- function(f) {
@@ -596,7 +597,7 @@ plot_profile2 <- function(m, filename = NULL, ...) {
       list(df = df, plot_title = plot_title, colors = colors)
     ))
   }
-  
+
   #----------------------------------------------------------------------------#
   # 3. plot
   ## 3.1 basic plot
@@ -616,7 +617,7 @@ plot_profile2 <- function(m, filename = NULL, ...) {
       labels = x_labels
     ) +
     ggtitle(plot_title)
-  
+
   ## 3.2 :colors
   if(inherits(colors, "character")) {
     # valid colors !!!
@@ -624,13 +625,13 @@ plot_profile2 <- function(m, filename = NULL, ...) {
     p <- p +
       scale_color_manual(values = colors)
   }
-  
+
   ## 3.3 :yaxis
   if(inherits(c(y_min,y_max), "numeric")) {
     p +
       scale_y_continuous(limits = c(y_min, y_max))
   }
-  
+
   ## 3.4 :theme
   if(inherits(plot_theme, "character")) {
     if(plot_theme %in% c("few")) {
@@ -643,7 +644,7 @@ plot_profile2 <- function(m, filename = NULL, ...) {
       ggplot2::theme_bw() +
       theme(panel.grid = element_blank())
   }
-  
+
   #----------------------------------------------------------------------------#
   # 4. save to files
   if(inherits(filename, "character")) {
@@ -698,19 +699,19 @@ combine_profile2 <- function(f1, f2, colors = NULL, ...) {
   # load data
   df1 <- plot_profile(f1, return_data = T, ...)
   df2 <- plot_profile(f2, return_data = T, ...)
-  
+
   # fix anti/sens
   df <- dplyr::bind_rows(
     dplyr::mutate(df1$df, label = paste0(label, ":sens")),
     dplyr::mutate(df2$df, label = paste0(label, ":anti"), score = -score)
   )
-  
+
   # fix levels
   v <- levels(df1$df$label)
   v <- c(paste0(v, ":sens"), paste0(v, ":anti"))
   df <- df %>%
     dplyr::mutate(label = factor(label, levels = v))
-  
+
   # common variables
   p <- ggplot(df, aes(x, score, color = label)) +
     geom_vline(xintercept = df1$x_sect, size = .5, color = "grey50", linetype = 2) +
@@ -729,7 +730,7 @@ combine_profile2 <- function(f1, f2, colors = NULL, ...) {
              y = c(-0.03, 0.03),
              label = c("antisense", "sense"),
              hjust = 1)
-  
+
   # fix colors
   if(inherits(colors, "character")) {
     colors2 <- rep(colors, 2)
@@ -739,337 +740,3 @@ combine_profile2 <- function(f1, f2, colors = NULL, ...) {
 }
 
 
-
-
-
-
-
-#------------------------------------------------------------------------------#
-# tmp func
-#
-#' 
-#' #------------------------------------------------------------------------------#
-#' #' see `computeMatrix` of deeptools at
-#' #' https://deeptools.readthedocs.io/en/develop/content/tools/plotProfile.html
-#' #'
-#' #' @param x path to the matrix file
-#' #'
-#' .read_matrix_header <- function(x) {
-#'   h <- readLines(x, n = 1)
-#'   j <- jsonlite::parse_json(gsub("^@", "", h))
-#'   ## 1.1 sample labels (bw files)
-#'   sr1 <- unlist(j$sample_boundaries)
-#'   sr  <- tail(sr1, -1) - head(sr1, -1)
-#'   sl  <- unlist(j$sample_labels) # !!! save order
-#'   ss  <- rep(sl, sr) # labels, global variable
-#'   #-------------------------#
-#'   # # update sample_labeles, from global_env
-#'   # if(inherits(sample_labels, "character")) {
-#'   #   if(length(s) == length(sample_labels)) {
-#'   #     s <- sample_labels
-#'   #   }
-#'   # }
-#'   #-------------------------#
-#'   ## 1.2 x-axis, labels
-#'   ## to-do: unscaled 5 prime: !!!
-#'   ## up, TSS, TES, down
-#'   us <- ifelse(rlang::has_name(j, "upstream"), j$upstream[[1]], 0)
-#'   gb <- ifelse(rlang::has_name(j, "body"), j$body[[1]], 1000)
-#'   ds <- ifelse(rlang::has_name(j, "downstream"), j$downstream[[1]], 0)
-#'   bs <- ifelse(rlang::has_name(j, "bin size"), j$`bin size`[[1]], 10)
-#'   u5 <- ifelse(rlang::has_name(j, "unscaled 5 prime"), j$`unscaled 5 prime`[1], 0)
-#'   u3 <- ifelse(rlang::has_name(j, "unscaled 3 prime"), j$`unscaled 3 prime`[1], 0)
-#'   ## lables on x axis
-#'   usl <- paste0("-", round(us / 1000, 1))
-#'   dsl <- paste0("+", round(ds / 1000, 1))
-#'   ## x-tick labels
-#'   if(rlang::has_name(j, "ref point")) {
-#'     ref <- j$`ref point`[[1]]
-#'   } else {
-#'     ref <- NULL
-#'   }
-#'   if(is.null(ref)) {
-#'     start_label <- "TSS"
-#'     end_label   <- "TES"
-#'     x_labels <- c(usl, start_label, end_label, dsl)
-#'     x_list      <- c(us, gb, ds) / bs
-#'     # x_ticks  <- Reduce(f = "+", x = c(us, gb, ds) / bs, accumulate = TRUE)
-#'   } else {
-#'     start_label <- NULL
-#'     end_label   <- NULL
-#'     x_labels <- c(usl, ref, dsl)
-#'     x_list      <- c(us, ds) / bs
-#'     # x_ticks  <- Reduce(f = "+", x = c(us, ds) / bs, accumulate = TRUE)
-#'   }
-#'   # ref <- switch(is.null(a)+1,"notNullHihi",NULL)
-#'   x_ticks  <- Reduce(f = "+", x = x_list, accumulate = TRUE) # add 0
-#'   x_ticks  <- c(0, x_ticks)
-#'   ## 1.3 Axis, labels
-#'   x_axis   <- unlist(lapply(sr, seq))
-#'   # x_ticks  <- Reduce(f = "+", x = c(us, gb, ds) / bs, accumulate = TRUE) # add 0
-#'   # x_ticks  <- c(0, x_ticks)
-#'   # x_labels <- c(usl, start_label, end_label, dsl)
-#'   x_title  <- "Genomic region (kb)"
-#'   y_title  <- "Mean of score"
-#'   x_sect   <- head(x_ticks, -1) %>% tail(-1) # TSS, TES
-#'   # print(paste0("!AAAA-1", f, x_ticks))
-#'   # return values
-#'   list(
-#'     sl = sl,   # sample_labels
-#'     ss = ss,  # list of sample_labels
-#'     x_axis   = x_axis,
-#'     x_ticks  = x_ticks,
-#'     x_labels = x_labels,
-#'     x_title  = x_title,
-#'     y_title  = y_title,
-#'     x_sect   = x_sect
-#'   )
-#'   # x_sect, x_title, x_ticks, x_labels, plot_title, s, colors, y_min, y_max, plot_theme
-#' }
-#' 
-#' 
-#' #----------------------------------------------------------------------------#
-#' # 2. load matrix
-#' .read_matrix <- function(x, avg_func="mean") {
-#'   ## 2.1 load file
-#'   df1 <- read.delim(x, header = FALSE, sep = "\t", comment.char = "@")
-#'   ma  <- df1 %>%
-#'     dplyr::select(-c(1:6)) %>%
-#'     as.matrix
-#'   ## 2.2 load header
-#'   header <- .read_matrix_header(x)
-#'   ## 2.2 meta data
-#'   # "mean", "median", "min", "max", "sum" and "std"; default: [mean]
-#'   score <- apply(ma, 2, match.fun(avg_func))
-#'   tibble::tibble(score = score, label = header$ss, x = header$x_axis) %>%
-#'     dplyr::mutate(label = factor(label, levels = header$sl))
-#' }
-#' 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#------------------------------------------------------------------------------#
-# deprecated
-
-# f <- "TTseq_YY122.anti.mat.gz"
-# a <- plot_profile(f, "abc.png", overwrite = T, return_data = T)
-
-# plot_profile_fun <- function(df, ...) {
-#   dots <- rlang::list2(...)
-#   # required
-#   # x_sect, x_title, x_ticks, x_labels, plot_title, s, colors, y_min, y_max, plot_theme
-#   if(! inherits(df, "data.frame")) {
-#     warning("require data.frame, df=, failed.")
-#     return(NULL)
-#   }
-#   r_cols <- c("score", "label", "x")
-#   if(! all(r_cols %in% names(df))) {
-#     r_str <- paste(r_cols, collapse = ", ")
-#     warning(glue::glue("missing required columns, see [{r_str}]"))
-#     return(NULL)
-#   }
-#
-#   # to variable
-#   for(name in names(args)) {
-#     if(rlang::is_empty(name)) next
-#     assign(name, args[[name]])
-#   }
-#   # 3.1 basic plot
-#   p <- ggplot(df, aes(x, score, color = label)) +
-#     geom_vline(xintercept = x_sect, size = .5, color = "grey50", linetype = 2) +
-#     geom_line(size = .7) +
-#     scale_x_continuous(
-#       name   = x_title,
-#       breaks = x_ticks,
-#       labels = x_labels
-#     ) +
-#     ggtitle(plot_title)
-#
-#   ## 3.2 :colors
-#   if(inherits(colors, "character")) {
-#     # valid colors !!!
-#     colors <- rep(colors, 100)[1:length(s)] #
-#     p <- p +
-#       scale_color_manual(values = colors)
-#   }
-#
-#   ## 3.3 :yaxis
-#   if(inherits(c(y_min,y_max), "numeric")) {
-#     p +
-#       scale_y_continuous(limits = c(y_min, y_max))
-#   }
-#
-#   ## 3.4 :theme
-#   if(inherits(plot_theme, "character")) {
-#     if(plot_theme %in% c("few")) {
-#       p <- p +
-#         ggthemes::scale_color_few() +
-#         ggthemes::theme_few()
-#     }
-#   }else {
-#     p <- p +
-#       ggplot2::theme_bw() +
-#       theme(panel.grid = element_blank())
-#   }
-#
-#   p
-# }
-
-
-
-
-
-
-
-
-
-# #
-# f <- "TTseq_YY122.anti.mat.gz"
-# a <- plot_profile(f, "abc.png", overwrite = T)
-# a <- plot_profile(f, "abc.png", colors = c("black", "red"), width = 10, overwrite = T, return_data = TRUE)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# #------------------------------------------------------------------------------#
-# # 0. arguments
-# sl <- "TSS"
-# el <- "TES"
-
-# #------------------------------------------------------------------------------#
-# # 1. load header
-# h <- readLines(f, n = 1)
-# j <- jsonlite::parse_json(gsub("^@", "", h))
-# j$upstream[[1]]
-# ## 1.1 labels (bw files)
-# x  <- unlist(j$sample_boundaries)
-# x1 <- tail(x, -1) - head(x, -1)
-# s  <- unlist(j$sample_labels)
-# ss <- rep(s, x1) # labels
-#
-# ## 1.2 x-axis, labels
-# ## to-do: unscaled 5 prime: !!!
-# ##
-# ## up, TSS, TES, down
-# us <- ifelse(rlang::has_name(j, "upstream"), j$upstream[[1]], 0)
-# gb <- ifelse(rlang::has_name(j, "body"), j$body[[1]], 1000)
-# ds <- ifelse(rlang::has_name(j, "downstream"), j$downstream[[1]], 0)
-# bs <- ifelse(rlang::has_name(j, "bin size"), j$`bin size`[[1]], 10)
-# u5 <- ifelse(rlang::has_name(j, "unscaled 5 prime"), j$`unscaled 5 prime`[[1]], 0)
-# u3 <- ifelse(rlang::has_name(j, "unscaled 3 prime"), j$`unscaled 3 prime`[[1]], 0)
-# ## lables on x axis
-# usl <- paste0("-", round(us / 1000, 1))
-# dsl <- paste0("+", round(ds / 1000, 1))
-#
-# ## 1.3 Axis, labels
-# x_ticks  <- Reduce(f = "+", x = c(us, gb, ds) / bs, accumulate = TRUE) # add 0
-# x_ticks  <- c(0, x_ticks)
-# x_labels <- c(usl, sl, el, dsl)
-# x_title  <- "Genomic region (kb)"
-# y_title  <- "Mean of score"
-# x_sect   <- head(x_ticks, -1) %>% tail(-1) # TSS, TES
-
-# #------------------------------------------------------------------------------#
-# # 2. load matrix
-# df <- read.delim(f, header = FALSE, sep = "\t", comment.char = "@")
-# ma <- df %>%
-#   dplyr::select(-c(1:6)) %>%
-#   as.matrix
-#
-# ## 2.1 average matrix
-# # "mean", "median", "min", "max", "sum" and "std"; default: [mean]
-# score <- apply(ma, 2, mean)
-# df1 <- tibble::tibble(score = score, label = ss, x = x_axis)
-#
-# #------------------------------------------------------------------------------#
-# # 3. plot
-# ## 3.1 basic plot
-# p <- ggplot(df1, aes(x, score, color = label)) +
-#   geom_vline(xintercept = x_sect, size = .5, color = "grey50", linetype = 2) +
-#   geom_line(size = .7) +
-#   scale_x_continuous(
-#     name   = x_title,
-#     breaks = x_ticks,
-#     labels = x_labels
-#   )
-#
-# ## 3.2 add theme
-# p <- p +
-#   ggthemes::scale_color_few() +
-#   ggthemes::theme_few()
-
-
-# f <- "TTseq_YY122.anti.mat.gz"
-# df <- readr::read_delim(f, "\t", col_names = F, comment = "@")
-#
-# df1 <- df %>%
-#   dplyr::select(-c(1:6)) %>%
-#   colMeans() %>%
-#   as.data.frame() %>%
-#   dplyr::mutate(sample = rep(c("s1", "s2"), each = 170),
-#                 pos    = rep(c(1:170), 2))
-#
-#
-# ggplot(df1, aes(pos, ., color = sample)) +
-#   geom_line()
-#
-#
-# s <- readr::read_lines(f, n_max = 1)
-# s <- gsub("^@", "", s)
-# d <- jsonlite::parse_json(s)
-
-
-
-
-#genes:4413
-#downstream:10000       upstream:2000   body:5000       bin size:100    unscaled 5 prime:0      unscaled 3 prime:0
-
-
-# ## load matrix, gz file
-# f2 <- "TTseq_YY122.anti.mat.tab"
-# df2 <- readr::read_delim(f2, delim = "\t", col_names = T, comment = "#")
