@@ -51,7 +51,6 @@ def cur_time():
 def filt_gtf(gtf, bed, **kwargs):
     """
     Filt Ensembl GTF file
-
     - feature: gene|exon|CDS|transcript, default: None
     - gene_biotype: TEC|protein_coding, default: None 
     - gene_size: --
@@ -218,7 +217,9 @@ def filt_by_flank(x, y, flank_size=6000, overwrite=False):
     with xopen(y, 'wt') as w:
         pre_gene = [None, None] #fwd, rev
         for i in xb:
-            if i.strand == '+':
+            if flank_size < 0:
+                pass # save all
+            elif i.strand == '+':
                 if pre_gene[0] is None:
                     pre_gene[0] = i
                 else:

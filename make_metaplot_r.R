@@ -21,7 +21,8 @@ suppressPackageStartupMessages(library(ggrepel))
 suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(fishualize))
 suppressPackageStartupMessages(library(ggthemes))
-source("/data/biosoft/make_metaplot/matrix2profile.R") # main functions
+# source("/data/biosoft/make_metaplot/matrix2profile.R") # main functions
+source("/data/biosoft/make_metaplot/make_metaplot.R") # make_metaplot()
 
 p <- make_metaplot(cfg)
 # p <- make_metaplot(cfg, overwrite = T, choose_samples = "t2_rep2", colors = c("blue"))
