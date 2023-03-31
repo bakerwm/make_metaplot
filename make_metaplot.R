@@ -57,10 +57,8 @@ make_metaplot <- function(x, ...) {
       m1 <- mat_sens
       m2 <- mat_anti
     }
-    # p <- matrix2profile2(m1, m2, sub_pdf, !!!args)
     p <- plot_profile_ss(m1, m2, sub_pdf, !!!args)
   } else if(file.exists(mat)) {
-    # p <- matrix2profile(mat, sub_pdf, !!!args)
     p <- plot_profile(mat, sub_pdf, !!!args)
     # x <- 1
   } else {
@@ -350,7 +348,7 @@ add_axis_line <- function(x, ...) {
     ) +
     theme(
       axis.line  = element_blank(),
-      axis.ticks = element_line(linewidth = .5, color = "grey20")
+      axis.ticks = element_line(linewidth = .3, color = "grey20")
     )
   # update x-axis ticks
   if(isTRUE(dots$add_x_ticks_extra)) {
@@ -615,18 +613,35 @@ plot_profile <- function(x, filename = NULL, ...) {
   tmp_build <- ggplot_build(tmp)
   # tmp_x_breaks <- tmp_build$layout$panel_params[[1]]$x.sec$get_breaks()
   tmp_y_breaks <- tmp_build$layout$panel_params[[1]]$y.sec$get_breaks()
+  tmp_y_breaks <- tmp_y_breaks[! is.na(tmp_y_breaks)]
+  y_max <- tail(tmp_y_breaks, 1) # last
+  if(inherits(args$y_max, "numeric")) {
+    if(args$y_max > y_max) y_max <- args$y_max
+  }
   ## add vlines
-  p <- ggplot(df) +
-    annotate(
-      "segment",
-      x     = x_sect,
-      xend  = x_sect,
-      y     = c(-Inf, -Inf),
-      yend  = rep(tail(tmp_y_breaks, 1), 2),
-      linewidth = 0.3,
-      linetype  = 2,
-      color = "grey50"
-    ) +
+  if(args$matrix_type == "scale-regions") {
+    p <- ggplot(df) +
+      annotate(
+        "segment",
+        x     = x_sect,
+        xend  = x_sect,
+        y     = c(-Inf, -Inf),
+        yend  = rep(y_max, 2),
+        linewidth = 0.3,
+        linetype  = 2,
+        color = "grey50"
+      )
+  } else {
+    p <- ggplot(df) +
+      geom_vline(
+        xintercept = x_sect,
+        linewidth  = .3,
+        linetype   = 2,
+        color      = "grey50"
+      )
+  }
+  ## add main lines
+  p <- p +
     geom_line(aes(x, score, color = .data[[color_by]]))
   ## fix x-axis
   if(isTRUE(args$add_x_ticks_extra)) {
@@ -832,6 +847,6 @@ plot_profile_ss <- function(x1, x2,  filename = NULL, ...) {
 # x = "results/metaplot/paused_all/fig1A/2.bw2matrix/fig1.A.ChIP_8WG16_60m.genebody.mat.gz"
 # (p <- plot_profile(x, filename = "tmp.cnt.pdf", colors = c("black", "red"), add_x_ticks_extra = T))
 
-x = "data/config/metaplot/paused_all/fig1A/fig1.A.ChIP_8WG16_60m.metaplot.genebody.yaml"
+x = "data/config/metaplot/paused_all/fig1A/fig1.A.ChIP_8WG16_60m.metaplot.tes.yaml"
 make_metaplot(x, overwrite = T, add_x_ticks_extra = T)
 
