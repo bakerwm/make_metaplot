@@ -1086,124 +1086,274 @@ plot_profile <- function(m, filename = NULL, ...) {
 }
 
 
-#' Generate strand-specific metaplot for regions/reference-point
+#' Generate strand-specific metaplot
 #'
 #' see `plotProfile` of deeptools at
 #' https://deeptools.readthedocs.io/en/develop/content/tools/plotProfile.html
 #'
-#' @param x1 matrix file for sense-strand, see `computeMatrix`
-#' @param x2 matrix file for anti-sense-strand,
+#' @param m1 matrix file for sense-strand, see `computeMatrix`
+#' @param m2 matrix file for anti-sense-strand,
 #' @param ... additional parameters, see arguments in `plot_profile` function
 #'
 #' @export
-plot_profile_ss <- function(x1, x2,  filename = NULL, ...) {
-  #----------------------------------------------------------------------------#
-  args <- .plot_profile_args(...) # default + ... arguments
-  # to variable
-  for(name in names(args)) {
-    if(rlang::is_empty(name)) next # skip NULL variables
-    assign(name, args[[name]]) # items to environment
-  }
-  #----------------------------------------------------------------------------#
+plot_profile_ss <- function(m1, m2,  filename = NULL, ...) {
+  # parse arugments from matrix_header + ...
+  args <- .setup_profile_params(m = m1, config = NULL, ...) # ... from config?
   # loading header from matrix
-  ## sens
-  hd1 <- .read_matrix_header(x1)
-  df1 <- .read_matrix(x1, averageType) # averageType checked
-  ## anti
-  hd2 <- .read_matrix_header(x2)
-  df2 <- .read_matrix(x2, averageType) # averageType checked
+  hd1 <- .read_matrix_header(m1) # sens
+  hd2 <- .read_matrix_header(m2) # anti
+  df1 <- .read_matrix(x = m1, bin_avg_type = args$bin_avg_type) # sens
+  df2 <- .read_matrix(x = m2, bin_avg_type = args$bin_avg_type) # anti
   df2$score <- -df2$score
-  # check groups
-  if(isTRUE(perGroup)) {
-    color_by <- "sample_label"
-    group_by <- "group_label"
-  } else {
-    color_by <- "group_label"
-    group_by <- "sample_label"
-  }
-  # 2.2 check color_by, group_by
-  cb <- rep(levels(df1[[color_by]]), times = 2)
-  cs <- rep(c("_fwd", "_rev"), each = length(cb) / 2)
-  cv <- paste0(cb, cs)
-  df1[[color_by]] <- paste0(df1[[color_by]], "_fwd")
-  df2[[color_by]] <- paste0(df2[[color_by]], "_rev")
-  df <- rbind(df1, df2)
-  df[[color_by]] <- factor(df[[color_by]], levels = cv)
-  # required:
-  hs <- c("x_ticks", "x_labels", "x_title", "y_title",
-          "smp_labels", "bin_avg_type")
-  for(name in hs) {
-    if(rlang::is_empty(name)) next
-    assign(name, hd1[[name]])
-  }
-  # update group labels
-  if(inherits(group_labels, "character")) {
-    if(length(group_labels) == length(hd1$group_labels)) {
-      # update
-      gl <- setNames(object = group_labels, nm = hd1$group_labels)
-      df$group_label <- gl[df$group_label]
+  df <- dplyr::bind_rows(df1, df2)
+  #----------------------------------------------------------------------------#
+  # Checkpoint-1: colors
+  color_by <- ifelse(isTRUE(args$per_group), "sample_labels", "group_labels")
+  df[[color_by]] <- paste0(
+    df[[color_by]],
+    c(
+      rep("_fwd", times = nrow(df1)),
+      rep("_rev", times = nrow(df2))
+    )
+  )
+  df[[color_by]] <- factor(
+    df[[color_by]],
+    levels = c(
+      paste0(levels(df1[[color_by]]), "_fwd"),
+      paste0(levels(df2[[color_by]]), "_rev")
+    )
+  )
+  #----------------------------------------------------------------------------#
+  # Checkpoint-2: group labels
+  group_by <- ifelse(isTRUE(args$per_group), "group_labels", "sample_labels")
+  group_labels <- unique(df$group_labels)
+  if(inherits(args$group_labels, "character")) {
+    if(length(args$group_labels) == length(group_labels)) {
+      gl <- setNames(object = args$group_labels, nm = group_labels)
+      df$group_labels <- gl[df$group_label]
     }
   }
   # 3.0 determine fig numbers
-  n_plots <- length(unique(df[[group_by]]))
-  n_width <- ifelse(n_plots > numPlotsPerRow, numPlotsPerRow, n_plots)
-  n_height <- ceiling(n_plots / numPlotsPerRow)
-  width <- n_width * width
-  height <- n_height * height
-  ## 3.1 :basic
-  x_sect <- head(hd1$x_ticks[-1], -1) # remove first, last element
-  p <- ggplot(df, aes(x, score, color = .data[[color_by]])) +
-    geom_vline(xintercept = x_sect, linewidth = .5,
-               color = "grey50", linetype = 2) +
-    geom_hline(yintercept = 0, linewidth = .5, color = "grey30") +
-    geom_line(linewidth = line_size) +
+  n_plots  <- length(unique(df[[group_by]]))
+  n_width  <- ifelse(n_plots > args$n_per_row, args$n_per_row, n_plots)
+  n_height <- ceiling(n_plots / args$n_per_row)
+  width    <- n_width * args$width
+  height   <- n_height * args$height
+  x_sect   <- head(args$x_ticks[-1], -1) # remove first, last element
+  #----------------------------------------------------------------------------#
+  # Checkpoint-3. basic plot
+  args$df <- df
+  args$color_by <- color_by
+  p <- do.call(plot_profile_basic, args) +
+    geom_hline(yintercept = 0, linewidth = .3, linetype = "dashed",
+               color = "grey30")
+  #----------------------------------------------------------------------------#
+  # Checkpoint-4. update x_axis, x_ticks
+  if(isTRUE(args$add_x_ticks_extra)) {
+    tix <- update_axis_ticks_x(args$x_labels, args$x_ticks)
+  } else {
+    tix <- list(x_ticks = args$x_ticks, x_labels = args$x_labels)
+  }
+  p <- p +
     scale_x_continuous(
-      name   = hd1$x_title,
-      breaks = hd1$x_ticks,
-      labels = hd1$x_labels
-    ) +
-    facet_wrap(as.formula(paste("~", group_by)), ncol = numPlotsPerRow,
-               scales = "free") +
-    ggtitle(plot_title)
-  # 3.2 :colors
-  if(inherits(colors, "character")) {
-    color_len <- unique(df1[[color_by]])
-    if(length(colors) == length(color_len)) {
-      colors_ss <- rep(colors, times = 2)
-      p <- p + scale_color_manual(values = colors_ss)
-    }
+      name   = args$x_title,
+      limits = c(min(tix$x_ticks), max(tix$x_ticks)),
+      breaks = tix$x_ticks,
+      labels = tix$x_labels,
+      expand = expansion(mult = c(0, 0))
+    )
+  #----------------------------------------------------------------------------#
+  # Checkpoint-5. update axis lines and genebody-bar
+  p <- update_axis_line(p, linewidth = args$linewidth) #
+  if(args$matrix_type == "scale-regions") {
+    p <- add_genebody_bar(p)
   }
-  ## 3.3 :yaxis
-  if(inherits(c(y_min, y_max), "numeric")) {
-    p <- p + scale_y_continuous(limits = c(-y_max, y_max))
-  }
-  ## 3.4 :theme
-  if(inherits(plot_theme, "character")) {
-    if(plot_theme %in% c("few")) {
-      p <- p +
-        ggthemes::scale_color_few() +
-        ggthemes::theme_few()
+  #----------------------------------------------------------------------------#
+  # Checkpoint-6. colors + themes
+  n_colors <- length(unique(df[[color_by]]))
+  if(inherits(args$colors, "character")) {
+    if(length(args$colors) >= n_colors / 2) {
+      colors <- rep(args$colors[seq_len(n_colors / 2)], times = 2)
+      p <- p + scale_color_manual(values = colors)
     }
-  }else {
+    # colors <- rep(args$colors, 100)[1:n_colors] #
+    # p <- p + scale_color_manual(values = colors)
+  }
+  # add themes
+  p <- p +
+    theme_classic() +
+    theme(
+      # panel.border = element_blank(),
+      # panel.grid = element_blank(),
+      # rect       = element_blank(),
+      axis.text  = element_text(color = "black"),
+      axis.line  = element_blank(),
+      axis.ticks = element_line(
+        linewidth = args$linewidth * .5, # 60% of axis line
+        color     = args$color
+      )
+      # axis.ticks = element_line(linewidth = .4, color = "grey30"),
+    )
+  # message(glue::glue(
+  #   "!B-1, axis linewidth: {args$linewidth}"
+  # ))
+  # 4. Facet by group_labels
+  if(length(group_labels) > 1) {
     p <- p +
-      ggplot2::theme_bw() +
-      theme(panel.grid = element_blank())
+      facet_wrap(as.formula(paste("~", group_by)), ncol = n_width)
   }
-  # 4. save to files
-  message(glue::glue("save to file: {filename}"))
+  #----------------------------------------------------------------------------#
+  # Checkpoint-7. save plot to file
   if(inherits(filename, "character")) {
-    ggsave(filename, p, width = width, height = height, units = units, dpi = dpi)
-    rds <- gsub("\\.[a-z]+$", ".rds", filename, perl = T)
-    saveRDS(p, file = rds)
+    if(file.exists(filename) && ! isTRUE(args$overwrite)) {
+      message(glue::glue("file exists: {filename}"))
+    } else {
+      pdf(NULL) # prevent generating empty file: "Rplot.pdf"
+      message(glue::glue(
+        "export pdf size, width={width}, height={height}"
+      ))
+      export::graph2pdf(
+        x = p, file = filename, width = width, height = height,
+        font = "Arial", bg = "transparent"
+      )
+      dev.off() # close empty pdf
+      rds <- gsub("\\.[a-z]+$", ".rds", filename, perl = T)
+      saveRDS(p, file = rds)
+    }
   }
-  p # return
+  # output
+  p
 }
+
+
+
+
+
+
+
+
+
+
+
+
+#' #' Generate strand-specific metaplot for regions/reference-point
+#' #'
+#' #' see `plotProfile` of deeptools at
+#' #' https://deeptools.readthedocs.io/en/develop/content/tools/plotProfile.html
+#' #'
+#' #' @param x1 matrix file for sense-strand, see `computeMatrix`
+#' #' @param x2 matrix file for anti-sense-strand,
+#' #' @param ... additional parameters, see arguments in `plot_profile` function
+#' #'
+#' #' @export
+#' plot_profile_ss <- function(x1, x2,  filename = NULL, ...) {
+#'   #----------------------------------------------------------------------------#
+#'   args <- .plot_profile_args(...) # default + ... arguments
+#'   # to variable
+#'   for(name in names(args)) {
+#'     if(rlang::is_empty(name)) next # skip NULL variables
+#'     assign(name, args[[name]]) # items to environment
+#'   }
+#'   #----------------------------------------------------------------------------#
+#'   # loading header from matrix
+#'   ## sens
+#'   hd1 <- .read_matrix_header(x1)
+#'   df1 <- .read_matrix(x1, averageType) # averageType checked
+#'   ## anti
+#'   hd2 <- .read_matrix_header(x2)
+#'   df2 <- .read_matrix(x2, averageType) # averageType checked
+#'   df2$score <- -df2$score
+#'   # check groups
+#'   if(isTRUE(perGroup)) {
+#'     color_by <- "sample_label"
+#'     group_by <- "group_label"
+#'   } else {
+#'     color_by <- "group_label"
+#'     group_by <- "sample_label"
+#'   }
+#'   # 2.2 check color_by, group_by
+#'   cb <- rep(levels(df1[[color_by]]), times = 2)
+#'   cs <- rep(c("_fwd", "_rev"), each = length(cb) / 2)
+#'   cv <- paste0(cb, cs)
+#'   df1[[color_by]] <- paste0(df1[[color_by]], "_fwd")
+#'   df2[[color_by]] <- paste0(df2[[color_by]], "_rev")
+#'   df <- rbind(df1, df2)
+#'   df[[color_by]] <- factor(df[[color_by]], levels = cv)
+#'   # required:
+#'   hs <- c("x_ticks", "x_labels", "x_title", "y_title",
+#'           "smp_labels", "bin_avg_type")
+#'   for(name in hs) {
+#'     if(rlang::is_empty(name)) next
+#'     assign(name, hd1[[name]])
+#'   }
+#'   # update group labels
+#'   if(inherits(group_labels, "character")) {
+#'     if(length(group_labels) == length(hd1$group_labels)) {
+#'       # update
+#'       gl <- setNames(object = group_labels, nm = hd1$group_labels)
+#'       df$group_label <- gl[df$group_label]
+#'     }
+#'   }
+#'   # 3.0 determine fig numbers
+#'   n_plots <- length(unique(df[[group_by]]))
+#'   n_width <- ifelse(n_plots > numPlotsPerRow, numPlotsPerRow, n_plots)
+#'   n_height <- ceiling(n_plots / numPlotsPerRow)
+#'   width <- n_width * width
+#'   height <- n_height * height
+#'   ## 3.1 :basic
+#'   x_sect <- head(hd1$x_ticks[-1], -1) # remove first, last element
+#'   p <- ggplot(df, aes(x, score, color = .data[[color_by]])) +
+#'     geom_vline(xintercept = x_sect, linewidth = .5,
+#'                color = "grey50", linetype = 2) +
+#'     geom_hline(yintercept = 0, linewidth = .5, color = "grey30") +
+#'     geom_line(linewidth = line_size) +
+#'     scale_x_continuous(
+#'       name   = hd1$x_title,
+#'       breaks = hd1$x_ticks,
+#'       labels = hd1$x_labels
+#'     ) +
+#'     facet_wrap(as.formula(paste("~", group_by)), ncol = numPlotsPerRow,
+#'                scales = "free") +
+#'     ggtitle(plot_title)
+#'   # 3.2 :colors
+#'   if(inherits(colors, "character")) {
+#'     color_len <- unique(df1[[color_by]])
+#'     if(length(colors) == length(color_len)) {
+#'       colors_ss <- rep(colors, times = 2)
+#'       p <- p + scale_color_manual(values = colors_ss)
+#'     }
+#'   }
+#'   ## 3.3 :yaxis
+#'   if(inherits(c(y_min, y_max), "numeric")) {
+#'     p <- p + scale_y_continuous(limits = c(-y_max, y_max))
+#'   }
+#'   ## 3.4 :theme
+#'   if(inherits(plot_theme, "character")) {
+#'     if(plot_theme %in% c("few")) {
+#'       p <- p +
+#'         ggthemes::scale_color_few() +
+#'         ggthemes::theme_few()
+#'     }
+#'   }else {
+#'     p <- p +
+#'       ggplot2::theme_bw() +
+#'       theme(panel.grid = element_blank())
+#'   }
+#'   # 4. save to files
+#'   message(glue::glue("save to file: {filename}"))
+#'   if(inherits(filename, "character")) {
+#'     ggsave(filename, p, width = width, height = height, units = units, dpi = dpi)
+#'     rds <- gsub("\\.[a-z]+$", ".rds", filename, perl = T)
+#'     saveRDS(p, file = rds)
+#'   }
+#'   p # return
+#' }
 
 
 # scale-regions
 # x = '/data/yulab/wangming/work/yu_2022/projects/20221229_dlj_ChrRNA_yy218/results/flanking_genes/results/fig1.gs_6k/2.bw2matrix/fig1.ChrRNA_YY218.gs_6k_sens.mat.gz'
-# x1 = '/data/yulab/wangming/work/yu_2022/projects/20221229_dlj_ChrRNA_yy218/results/flanking_genes/results/fig1.gs_6k/2.bw2matrix/fig1.ChrRNA_YY218.gs_6k_sens.mat.gz'
-# x2 = '/data/yulab/wangming/work/yu_2022/projects/20221229_dlj_ChrRNA_yy218/results/flanking_genes/results/fig1.gs_6k/2.bw2matrix/fig1.ChrRNA_YY218.gs_6k_anti.mat.gz'
+# m1 = '/data/yulab/wangming/work/yu_2022/projects/20221229_dlj_ChrRNA_yy218/results/flanking_genes/results/fig1.gs_6k/2.bw2matrix/fig1.ChrRNA_YY218.gs_6k_sens.mat.gz'
+# m2 = '/data/yulab/wangming/work/yu_2022/projects/20221229_dlj_ChrRNA_yy218/results/flanking_genes/results/fig1.gs_6k/2.bw2matrix/fig1.ChrRNA_YY218.gs_6k_anti.mat.gz'
 # x = "data/config/metaplot/paused_all/fig1A/fig1.A.ChIP_8WG16_60m.metaplot.tss.yaml"
 
 # am = "results/metaplot/paused_all/fig1A/2.bw2matrix/fig1.A.ChIP_8WG16_60m.tes.mat.gz"
@@ -1214,4 +1364,8 @@ plot_profile_ss <- function(x1, x2,  filename = NULL, ...) {
 
 # am = "results/metaplot/paused_all/fig1E/2.bw2matrix/fig1.E.CnT_Ser2P_vs_total.genebody.mat.gz"
 # ay = "data/config/metaplot/paused_all/fig1E/fig1.E.CnT_Ser2P_vs_total.metaplot.genebody.yaml"
-
+#
+# m1 = "results/metaplot/paused_all/fig1G/2.bw2matrix/fig1.G.ChrRNA_rmPcf11.genebody_sens.mat.gz"
+# m2 = "results/metaplot/paused_all/fig1G/2.bw2matrix/fig1.G.ChrRNA_rmPcf11.genebody_anti.mat.gz"
+# ay = "data/config/metaplot/paused_all/fig1G/fig1.G.ChrRNA_rmPcf11.metaplot.genebody.yaml"
+#
