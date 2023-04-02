@@ -87,7 +87,7 @@ make_metaplot <- function(x, ...) {
     # end_label     = "TES",
     # point_label   = "TSS",  # same as start label
     # group_labels  = NULL, # from header, regionsLabel
-    # line_width     = 0.6,
+    # linewidth     = 0.6,
     # return_data   = FALSE, # return data.frame
     # sample_labels = NULL, # from header, samplesLabel
     # sample_list   = NULL,
@@ -134,7 +134,7 @@ read_profile_yaml <- function(x, ...) {
     height     = 2.5,
     units      = "in",
     dpi        = 300,
-    line_width = 0.6,
+    linewidth = 0.6,
     overwrite  = FALSE,
     n_per_row  = 3   # from config.yaml
   )
@@ -382,6 +382,7 @@ fix_axis_ticks <- function(x, axis = "y") {
   # check ticks/breaks on axis
   axis <- get_ggplot_axis(x)
   if(any(is.na(axis$y_breaks))) {
+    y_limits <- axis$y_limits
     y_breaks <- scales::breaks_extended()(axis$y_limits)
     y_limits <- c(min(y_limits, y_breaks), max(y_limits, y_breaks))
     # fix digits
@@ -398,8 +399,8 @@ fix_axis_ticks <- function(x, axis = "y") {
         )
     )
   } else {
-    y_breaks <- axis$y_breaks
     y_limits <- axis$y_limits
+    y_breaks <- axis$y_breaks
     y_limits <- c(min(y_limits, y_breaks), max(y_limits, y_breaks))
     # fix digits
     n_digits <- max(count_digits(y_breaks))
@@ -707,13 +708,16 @@ update_axis_line <- function(x, ...) {
     "yend" = c(-Inf, tail(y_breaks, 1))
   )
   # add lines
+  # warning(glue::glue(
+  #   "!A-1, linewidth: {args$linewidth}"
+  # ))
   x +
     do.call(annotate, modifyList(seg_h, args)) +
     theme(
       axis.line  = element_blank(),
       axis.ticks = element_line(
-        linewidth = args$linewidth * .6, # 60% of axis line
-        color = args$color
+        linewidth = args$linewidth * .5, # 60% of axis line
+        color     = args$color
       )
     )
 }
@@ -977,7 +981,7 @@ plot_profile <- function(m, filename = NULL, ...) {
     )
   #----------------------------------------------------------------------------#
   # Checkpoint-3. update axis lines and genebody-bar
-  p <- update_axis_line(p) #
+  p <- update_axis_line(p, linewidth = args$linewidth) #
   if(args$matrix_type == "scale-regions") {
     p <- add_genebody_bar(p)
   }
@@ -1008,9 +1012,16 @@ plot_profile <- function(m, filename = NULL, ...) {
       # panel.grid = element_blank(),
       # rect       = element_blank(),
       axis.text  = element_text(color = "black"),
-      axis.line  = element_blank()
+      axis.line  = element_blank(),
+      axis.ticks = element_line(
+        linewidth = args$linewidth * .5, # 60% of axis line
+        color     = args$color
+      )
       # axis.ticks = element_line(linewidth = .4, color = "grey30"),
     )
+  # message(glue::glue(
+  #   "!B-1, axis linewidth: {args$linewidth}"
+  # ))
   # 4. Facet by group_labels
   if(length(group_labels) > 1) {
     p <- p +
