@@ -4,6 +4,7 @@ suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(hiseqr))
 # plot_profile, plot_profile_ss
 
+
 #------------------------------------------------------------------------------#
 # make_metaplot (profile)
 # save to "${out_dir}/5.matrix2profile/${prefix}_plotProfile.pdf
@@ -13,27 +14,7 @@ suppressPackageStartupMessages(library(hiseqr))
 #'
 #' @export
 make_metaplot <- function(x, ...) {
-  # 1. load config
-  # j <- tryCatch(
-  #   {
-  #     yaml::read_yaml(x)
-  #   },
-  #   error = function(cond) {
-  #     message(glue::glue("Failed to YAML file: {x}"))
-  #     message(cond)
-  #     # Choose a return value in case of error
-  #     return(NULL)
-  #   }
-  # )
-  # # 2. check-point
-  # if(! inherits(j, "list")) {
-  #   return(NULL)
-  # }
-  # 3. check args
-  args <- .setup_profile_params(config = x)
-  # args$reverse_strand <- FALSE # default
-  # args <- .setup_profile_params(x = NULL, !!!j)
-  # args <- purrr::list_modify(args, ...)
+  args <- .setup_profile_params(m = NULL, config = x, ...)
   # 4. output
   out_dir <- ifelse(rlang::has_name(args, "out_dir"), args$out_dir, "./")
   prefix  <- ifelse(rlang::has_name(args, "prefix"), args$prefix, "metaplot")
@@ -204,7 +185,7 @@ read_profile_yaml <- function(x, ...) {
 #' Initate params for matrix2plot
 #' combine parameters from matrix and config.yaml file
 #'
-#' @param x str Path to matrix file or config file, default NULL
+#' @param m str Path to matrix file or config file, default NULL
 #' @param ... optinoal arguments from config.yaml file
 #'
 #' @return
@@ -212,14 +193,14 @@ read_profile_yaml <- function(x, ...) {
 #'
 #' @examples
 #'  .setup_param()
-.setup_profile_params <- function(x = NULL, config = NULL, ...) {
+.setup_profile_params <- function(m = NULL, config = NULL, ...) {
   # load defaults
   args <- .plot_profile_args() # default
   # read matrix header
   # args <- list() # empty
-  if(inherits(x, "character")) {
-    if(endsWith(x, ".mat.gz")) {
-      h1 <- .read_matrix_header(x) # extract from matrix header
+  if(inherits(m, "character")) {
+    if(endsWith(m, ".mat.gz")) {
+      h1 <- .read_matrix_header(m) # extract from matrix header
       h2 <- rlang::list2(
         sample_labels = h1$smp_labels,
         group_labels  = h1$group_labels,
@@ -344,22 +325,95 @@ update_axis_range_y <- function(x, y_min = NULL, y_max = NULL) {
 
 
 # read ggplot data
-get_ggplot_layout <- function(p) {
+get_ggplot_axis <- function(p) {
   if(! inherits(p, "ggplot")) {
     message(glue::glue("Expect ggplot, got {class(p)[1]}"))
     return(p)
   }
-  b <- ggplot2::ggplot_build(p)
-  ## x axis
-  x_name   <- p_build$layout$panel_params[[1]]$x.sec$name         # name
-  x_limits <- p_build$layout$panel_params[[1]]$x.sec$get_limits() # limits
-  x_breaks <- p_build$layout$panel_params[[1]]$x.sec$get_breaks() # breaks
-  x_range  <- p_build$layout$panel_params[[1]]$x.range # range
-  ## y axis
-  y_name   <- p_build$layout$panel_params[[1]]$y.sec$name         # name
-  y_limits <- p_build$layout$panel_params[[1]]$y.sec$get_limits() # limits
-  y_breaks <- p_build$layout$panel_params[[1]]$y.sec$get_breaks() # breaks
-  y_range  <- p_build$layout$panel_params[[1]]$y.range # range
+  p_build <- ggplot2::ggplot_build(p)
+  # output
+  list(
+    ## x axis
+    x_name   = p_build$layout$panel_params[[1]]$x.sec$name,      # name
+    x_limits = p_build$layout$panel_params[[1]]$x.sec$get_limits(), # limits
+    x_breaks = p_build$layout$panel_params[[1]]$x.sec$get_breaks(), # breaks
+    x_labels = p_build$layout$panel_params[[1]]$x.sec$get_labels(), # breaks
+    x_range  = p_build$layout$panel_params[[1]]$x.range, # range
+    ## y axis
+    y_name   = p_build$layout$panel_params[[1]]$y.sec$name,         # name
+    y_limits = p_build$layout$panel_params[[1]]$y.sec$get_limits(), # limits
+    y_breaks = p_build$layout$panel_params[[1]]$y.sec$get_breaks(), # breaks
+    y_labels = p_build$layout$panel_params[[1]]$y.sec$get_labels(), # breaks
+    y_range  = p_build$layout$panel_params[[1]]$y.range # range
+  )
+}
+
+
+#' Fix y-axis ticks
+#'
+#' Force to show min/max ticks
+#'
+#' @param x ggplot A ggplot
+#' @param axis character x or y axis, default: [y],
+#'   currently, only support y-axis.#'
+#' @return
+#' @export
+#'
+#' @examples
+fix_axis_ticks <- function(x, axis = "y") {
+  # check arguments
+  if(! inherits(x, "ggplot")) {
+    warning("Not a ggplot input, skipped ...")
+    return(x)
+  }
+  #------------------------------------------#
+  # count the number of digits
+  count_digits <- function(x) {
+    sapply(x, function(i) {
+      if(i %% 1 != 0) {
+        s <- strsplit(gsub("0+$", "", as.character(i)), ".", fixed = TRUE)
+        nchar(unlist(s)[2])
+      } else {
+        0
+      }
+    })
+  }
+  #------------------------------------------#
+  # check ticks/breaks on axis
+  axis <- get_ggplot_axis(x)
+  if(any(is.na(axis$y_breaks))) {
+    y_breaks <- scales::breaks_extended()(axis$y_limits)
+    y_limits <- c(min(y_limits, y_breaks), max(y_limits, y_breaks))
+    # fix digits
+    n_digits <- max(count_digits(y_breaks))
+    accuracy <- 10^(- n_digits)
+    # update y-axis
+    suppressMessages(
+      x +
+        scale_y_continuous(
+          limits = y_limits,
+          breaks = y_breaks,
+          labels = scales::number_format(accuracy = accuracy),
+          expand = expansion(mult = c(0, 0.06))
+        )
+    )
+  } else {
+    y_breaks <- axis$y_breaks
+    y_limits <- axis$y_limits
+    y_limits <- c(min(y_limits, y_breaks), max(y_limits, y_breaks))
+    # fix digits
+    n_digits <- max(count_digits(y_breaks))
+    accuracy <- 10^(- n_digits)
+    suppressMessages(
+      x +
+        scale_y_continuous(
+          limits = y_limits,
+          breaks = y_breaks,
+          labels = scales::number_format(accuracy = accuracy) ,
+          expand = expansion(mult = c(0, 0.06))
+        )
+    )
+  }
 }
 
 
@@ -470,6 +524,8 @@ plot_profile_basic <- function(df, x_ticks, x_labels, y_min = NULL,
   }
   p <- p +
     geom_line(aes(x, score, color = .data[[color_by]]))
+  # fix y_axis
+  p <- fix_axis_ticks(p)
   #----------------------------------------------------------------------------#
   # 3. Add titles
   dots <- rlang::list2(...)
@@ -502,9 +558,9 @@ add_genebody_bar <- function(x, expand = 0.1, margin = 0, ...) {
   }
   # default arguments
   default_args <- list(
-      fill  = "grey50",
-      color = "grey50",
-      linewidth = 0.3
+    fill  = "grey50",
+    color = "grey50",
+    linewidth = 0.3
   )
   args <- purrr::list_modify(default_args, ...)
   # Extract arguments from plot
@@ -703,9 +759,6 @@ update_axis_ticks_x <- function(x_labels, x_ticks) {
 }
 
 
-#----------------------------------------------------------------------------#
-
-
 # reference-point
 # x = '/data/yulab/wangming/work/yu_2022/projects/20221229_dlj_ChrRNA_yy218/results/flanking_genes/results/fig2.tss.gs_6k/2.bw2matrix/fig2.ChrRNA_YY218.gs_6k_anti.mat.gz'
 #' see `computeMatrix` of deeptools at
@@ -867,7 +920,7 @@ update_axis_ticks_x <- function(x_labels, x_ticks) {
 #' see `plotProfile` of deeptools at
 #' https://deeptools.readthedocs.io/en/develop/content/tools/plotProfile.html
 #'
-#' @param x character path to the matrix file, output of `computeMatrix`
+#' @param m character path to the matrix file, output of `computeMatrix`
 #'   in `deeptools`
 #' @param filename path to the plot file
 #'
@@ -875,14 +928,15 @@ update_axis_ticks_x <- function(x_labels, x_ticks) {
 #' @importFrom purrr list_modify
 #' @importFrom jsonlite parse_json
 #' @importFrom ggthemes scale_color_few theme_few
-#' @importFrom ggplot2 ggplot geom_vline geom_line scale_x_continuous ggtitle theme scale_color_manual scale_y_continuous theme_bw theme
+#' @importFrom ggplot2 ggplot geom_vline geom_line scale_x_continuous ggtitle
+#'   theme scale_color_manual scale_y_continuous theme_bw theme
 #'
 #' @export
-plot_profile <- function(x, filename = NULL, ...) {
+plot_profile <- function(m, filename = NULL, ...) {
   # parse arugments from matrix_header + ...
-  args <- .setup_profile_params(x, config = NULL, ...) # ... from config?
+  args <- .setup_profile_params(m = m, config = NULL, ...) # ... from config?
   # loading header from matrix
-  df <- .read_matrix(x, bin_avg_type = args$bin_avg_type) # averageType checked
+  df <- .read_matrix(x = m, bin_avg_type = args$bin_avg_type) #
   #----------------------------------------------------------------------------#
   # Checkpoint-1: group labels
   group_labels <- unique(df$group_labels)
@@ -1106,9 +1160,9 @@ plot_profile_ss <- function(x1, x2,  filename = NULL, ...) {
 # x2 = '/data/yulab/wangming/work/yu_2022/projects/20221229_dlj_ChrRNA_yy218/results/flanking_genes/results/fig1.gs_6k/2.bw2matrix/fig1.ChrRNA_YY218.gs_6k_anti.mat.gz'
 # x = "data/config/metaplot/paused_all/fig1A/fig1.A.ChIP_8WG16_60m.metaplot.tss.yaml"
 
-am = "results/metaplot/paused_all/fig1A/2.bw2matrix/fig1.A.ChIP_8WG16_60m.genebody.mat.gz"
+am = "results/metaplot/paused_all/fig1A/2.bw2matrix/fig1.A.ChIP_8WG16_60m.tss.mat.gz"
 # (p <- plot_profile(am, filename = "tmp.cnt.pdf", colors = c("black", "red"), overwrite = T, add_x_ticks_extra = T))
 
-ay = "data/config/metaplot/paused_all/fig1A/fig1.A.ChIP_8WG16_60m.metaplot.genebody.yaml"
-# make_metaplot(ay, overwrite = T, add_x_ticks_extra = T)
+ay = "data/config/metaplot/paused_all/fig1A/fig1.A.ChIP_8WG16_60m.metaplot.tss.yaml"
+make_metaplot(ay, overwrite = T, add_x_ticks_extra = T)
 
