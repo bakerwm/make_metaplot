@@ -360,7 +360,7 @@ get_ggplot_axis <- function(p) {
 #' @export
 #'
 #' @examples
-fix_axis_ticks <- function(x, axis = "y") {
+fix_axis_ticks <- function(x, y_min = NULL, y_max = NULL) {
   # check arguments
   if(! inherits(x, "ggplot")) {
     warning("Not a ggplot input, skipped ...")
@@ -384,7 +384,16 @@ fix_axis_ticks <- function(x, axis = "y") {
   if(any(is.na(axis$y_breaks))) {
     y_limits <- axis$y_limits
     y_breaks <- scales::breaks_extended()(axis$y_limits)
-    y_limits <- c(min(y_limits, y_breaks), max(y_limits, y_breaks))
+    y_limits <- c(
+      min(y_limits, y_breaks, y_min),
+      max(y_limits, y_breaks, y_max)
+    )
+    ## update all
+    y_breaks <- scales::breaks_extended(only.loose = TRUE)(y_limits) # updated
+    y_limits <- c(
+      min(y_limits, y_breaks, y_min),
+      max(y_limits, y_breaks, y_max)
+    )
     # fix digits
     n_digits <- max(count_digits(y_breaks))
     accuracy <- 10^(- n_digits)
@@ -526,7 +535,7 @@ plot_profile_basic <- function(df, x_ticks, x_labels, y_min = NULL,
   p <- p +
     geom_line(aes(x, score, color = .data[[color_by]]))
   # fix y_axis
-  p <- fix_axis_ticks(p)
+  p <- fix_axis_ticks(p, y_min, y_max)
   #----------------------------------------------------------------------------#
   # 3. Add titles
   dots <- rlang::list2(...)
@@ -1171,9 +1180,9 @@ plot_profile_ss <- function(x1, x2,  filename = NULL, ...) {
 # x2 = '/data/yulab/wangming/work/yu_2022/projects/20221229_dlj_ChrRNA_yy218/results/flanking_genes/results/fig1.gs_6k/2.bw2matrix/fig1.ChrRNA_YY218.gs_6k_anti.mat.gz'
 # x = "data/config/metaplot/paused_all/fig1A/fig1.A.ChIP_8WG16_60m.metaplot.tss.yaml"
 
-am = "results/metaplot/paused_all/fig1A/2.bw2matrix/fig1.A.ChIP_8WG16_60m.tss.mat.gz"
+# am = "results/metaplot/paused_all/fig1A/2.bw2matrix/fig1.A.ChIP_8WG16_60m.tes.mat.gz"
 # (p <- plot_profile(am, filename = "tmp.cnt.pdf", colors = c("black", "red"), overwrite = T, add_x_ticks_extra = T))
 
-ay = "data/config/metaplot/paused_all/fig1A/fig1.A.ChIP_8WG16_60m.metaplot.tss.yaml"
-make_metaplot(ay, overwrite = T, add_x_ticks_extra = T)
+# ay = "data/config/metaplot/paused_all/fig1A/fig1.A.ChIP_8WG16_60m.metaplot.tes.yaml"
+# make_metaplot(ay, overwrite = T, add_x_ticks_extra = T)
 
