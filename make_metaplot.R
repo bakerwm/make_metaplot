@@ -14,28 +14,29 @@ suppressPackageStartupMessages(library(hiseqr))
 #' @export
 make_metaplot <- function(x, ...) {
   # 1. load config
-  j <- tryCatch(
-    {
-      yaml::read_yaml(x)
-    },
-    error = function(cond) {
-      message(glue::glue("Failed to YAML file: {x}"))
-      message(cond)
-      # Choose a return value in case of error
-      return(NULL)
-    }
-  )
-  # 2. check-point
-  if(! inherits(j, "list")) {
-    return(NULL)
-  }
+  # j <- tryCatch(
+  #   {
+  #     yaml::read_yaml(x)
+  #   },
+  #   error = function(cond) {
+  #     message(glue::glue("Failed to YAML file: {x}"))
+  #     message(cond)
+  #     # Choose a return value in case of error
+  #     return(NULL)
+  #   }
+  # )
+  # # 2. check-point
+  # if(! inherits(j, "list")) {
+  #   return(NULL)
+  # }
   # 3. check args
-  j$reverse_strand <- FALSE # default
-  args <- .setup_metaplot_params(x = NULL, !!!j)
-  args <- purrr::list_modify(args, ...)
+  args <- .setup_profile_params(config = x)
+  # args$reverse_strand <- FALSE # default
+  # args <- .setup_profile_params(x = NULL, !!!j)
+  # args <- purrr::list_modify(args, ...)
   # 4. output
-  out_dir <- ifelse(rlang::has_name(j, "out_dir"), j$out_dir, "./")
-  prefix  <- ifelse(rlang::has_name(j, "prefix"), j$prefix, "metaplot")
+  out_dir <- ifelse(rlang::has_name(args, "out_dir"), args$out_dir, "./")
+  prefix  <- ifelse(rlang::has_name(args, "prefix"), args$prefix, "metaplot")
   mat <- file.path(out_dir, "2.bw2matrix", glue::glue("{prefix}.mat.gz"))
   mat_sens <- gsub(".mat.gz$", "_sens.mat.gz", mat)
   mat_anti <- gsub(".mat.gz$", "_anti.mat.gz", mat)
@@ -76,47 +77,6 @@ make_metaplot <- function(x, ...) {
 # 3.matrxi2profile
 # 4.matrix2heatmap
 # 5.matrix2profile_R
-.plot_profile_args <- function(...) {
-  # default arguments
-  args <- list(
-    averageType   = NULL, # from header, avg_func
-    colors        = NULL, # auto
-    width         = 6,
-    height        = 3,
-    units         = "in",
-    dpi           = 300,
-    # start_label   = "TSS",
-    # end_label     = "TES",
-    # point_label   = "TSS",  # same as start label
-    # group_labels  = NULL, # from header, regionsLabel
-    line_size     = 0.6,
-    numPlotsPerRow = 3,   # from config.yaml
-    overwrite     = FALSE,
-    perGroup      = TRUE, # from config.yaml
-    plot_theme    = NULL, # default: theme_bw()
-    plot_title    = "metaplot",
-    # return_data   = FALSE, # return data.frame
-    # sample_labels = NULL, # from header, samplesLabel
-    sample_list   = NULL,
-    x_title       = NULL, # from header
-    yMax          = NULL, # from deeptool.plotProfile
-    yMin          = NULL, # from deeptool.plotProfile
-    # y_max         = NULL, # auto
-    # y_min         = NULL, # auto
-    y_title       = NULL  # from header
-  )
-  # update y_min, y_max
-  if(is.null(args[["y_min"]]) & inherits(args[['yMin']], "numeric")) {
-    args[["y_min"]] <- args[["yMin"]]
-  }
-  if(is.null(args[["y_max"]]) & inherits(args[["yMax"]], "numeric")) {
-    args[["y_max"]] <- args[["yMax"]]
-  }
-  # dots <- rlang::list2(...)
-  purrr::list_modify(args, ...) # items of list to environment
-}
-
-
 .is_valid_avg_func <- function(x) {
   avg_list <- c("mean", "median", "min", "max", "sum", "std")
   if(inherits(x, "character")) {
@@ -137,10 +97,114 @@ make_metaplot <- function(x, ...) {
 }
 
 
+.plot_profile_args <- function(...) {
+  # default arguments
+  args <- list(
+    # averageType   = "mean", # from header, avg_func
+    # colors        = NULL, # auto
+    # start_label   = "TSS",
+    # end_label     = "TES",
+    # point_label   = "TSS",  # same as start label
+    # group_labels  = NULL, # from header, regionsLabel
+    # line_width     = 0.6,
+    # return_data   = FALSE, # return data.frame
+    # sample_labels = NULL, # from header, samplesLabel
+    # sample_list   = NULL,
+    # x_title       = NULL, # from header
+    # plot_theme    = NULL, # default: theme_bw()
+    # y_max         = NULL, # auto
+    # y_min         = NULL, # auto
+    # y_title       = NULL  # from header
+    # yMax       = NULL, # from deeptool.plotProfile
+    # yMin       = NULL  # from deeptool.plotProfile
+    reverse_strand = FALSE,
+    out_dir    = "./",
+    prefix     = "metaplot",
+    width      = 5,
+    height     = 2.5,
+    units      = "in",
+    dpi        = 300,
+    n_per_row  = 3,    # from config.yaml
+    per_group  = TRUE, # from config.yaml
+    plot_title = "metaplot",
+    overwrite  = FALSE,
+    add_x_ticks_extra = FALSE
+  )
+  purrr::list_modify(args, ...) # items of list to environment
+}
+
+
+#' Read arguments from profile YAML
+#'
+#' @param x character path to the `.yaml` file
+#' @param ... extra options for arguments
+#'
+#' @return
+#' @export
+#'
+#' @examples
+#' # read yaml
+#' args <- read_profile_yaml(x)
+read_profile_yaml <- function(x, ...) {
+  # read config.yaml for profile/metaplot
+  # see deeptools.plotProfile arguments
+  args_default <- list(
+    width      = 5,
+    height     = 2.5,
+    units      = "in",
+    dpi        = 300,
+    line_width = 0.6,
+    overwrite  = FALSE,
+    n_per_row  = 3   # from config.yaml
+  )
+  args <- .plot_profile_args(!!!args_default)
+  # read yaml
+  args1 <- tryCatch(
+    {
+      yaml::read_yaml(x)
+    },
+    error = function(cond) {
+      message(glue::glue("Failed to YAML file: {x}"))
+      message(cond)
+      # Choose a return value in case of error
+      return(NULL)
+    }
+  )
+  args <- purrr::list_modify(args, !!!args1) # overwrite by yaml
+  # args1 <- purrr::list_modify(args1, ...) # customized
+  ## renmae argument names for downstream plots
+  args2 <- rlang::list2(
+    # add_x_ticks_extra = FALSE,
+    bin_size    = args$binSize,
+    plot_title  = args$plotTitle,
+    start_label = args$startLabel,
+    point_label = args$refPointLabel,
+    end_label   = args$endLabel,
+    x_title     = args$xAxisLabel,
+    y_title     = args$yAxisLabel,
+    y_min       = args$yMin,
+    y_max       = args$yMax,
+    per_group   = args$perGroup,
+    n_per_row   = args$numPlotsPerRow,
+    group_labels  = args$regionsLabel,
+    sample_labels = args$samplesLabel,
+    bin_avg_type  = args$averageType
+  )
+  args <- purrr::list_modify(args, !!!args2) # rename arguments
+  args <- purrr::list_modify(args, ...) # overwrite by ...
+  args <- purrr::discard(args, is.null) # remove null arguments
+  # fix colors
+  if(inherits(args$colors, "character")) {
+    args$colors <- strsplit(args$colors, "\\s+", perl = TRUE) %>% unlist
+  }
+  args
+}
+
+
 #' Initate params for matrix2plot
 #' combine parameters from matrix and config.yaml file
 #'
-#' @param x str Path to matrix file
+#' @param x str Path to matrix file or config file, default NULL
 #' @param ... optinoal arguments from config.yaml file
 #'
 #' @return
@@ -148,90 +212,306 @@ make_metaplot <- function(x, ...) {
 #'
 #' @examples
 #'  .setup_param()
-.setup_metaplot_params <- function(x = NULL, ...) {
-  # Extract params from matrix file
+.setup_profile_params <- function(x = NULL, config = NULL, ...) {
+  # load defaults
+  args <- .plot_profile_args() # default
+  # read matrix header
+  # args <- list() # empty
   if(inherits(x, "character")) {
-    h1 <- .read_matrix_header(x) # extract from matrix header
-    h2 <- rlang::list2(
-      sample_labels = h1$smp_labels,
-      group_labels  = h1$group_labels,
-      averageType   = h1$bin_avg_type,
-      bin_size      = h1$bs,
-      per_group     = TRUE # default
-    )
-    h <- purrr::list_modify(h2, !!!h1)
-  } else {
-    h <- list() # blank
+    if(endsWith(x, ".mat.gz")) {
+      h1 <- .read_matrix_header(x) # extract from matrix header
+      h2 <- rlang::list2(
+        sample_labels = h1$smp_labels,
+        group_labels  = h1$group_labels,
+        averageType   = h1$bin_avg_type,
+        bin_size      = h1$bs
+        # per_group     = TRUE # default
+      )
+      h <- modifyList(h1, h2)
+      args <- modifyList(args, h)
+      # args <- purrr::list_modify(args, !!!h1)
+      # args <- purrr::list_modify(args, !!!h2) # args1
+    }
   }
-  # optional from config.yaml
-  # see deeptools.plotProfile arguments
-  ## default
-  args_default <- list(
-    width         = 6,
-    height        = 2.5,
-    units         = "in",
-    dpi           = 300,
-    line_size     = 0.6,
-    numPlotsPerRow = 3,   # from config.yaml
-    overwrite     = FALSE
-  )
-  args1 <- purrr::list_modify(args_default, ...)
-  # args1 <- .plot_profile_args(...) # default + custome
-  ## renmae argument names for downstream plots
-  args2 <- rlang::list2(
-    add_x_ticks_extra = FALSE,
-    bin_size    = args1$binSize,
-    plot_title  = args1$plotTitle,
-    start_label = args1$startLabel,
-    point_label = args1$refPointLabel,
-    end_label   = args1$endLabel,
-    x_title     = args1$xAxisLabel,
-    y_title     = args1$yAxisLabel,
-    y_min       = args1$yMin,
-    y_max       = args1$yMax,
-    per_group   = args1$perGroup,
-    group_labels  = args1$regionsLabel,
-    sample_labels = args1$samplesLabel,
-    bin_avg_type  = args1$averageType
-  )
-  args <- purrr::list_modify(args2, !!!args1) # modify
-  args <- purrr::discard(args, is.null) # remove null arguments
-  # fix colors
-  if(inherits(args$colors, "character")) {
-    args$colors <- strsplit(args$colors, "\\s+", perl = TRUE) %>% unlist
+  # read config
+  if(inherits(config, "character")) {
+    if(endsWith(config, ".yaml")) {
+      args2 <- read_profile_yaml(config)
+      args  <- purrr::list_modify(args, !!!args2) # updated
+    }
   }
-  # updated by optional arguments
-  purrr::list_modify(h, !!!args) # overwrite header
-  # purrr::list_modify(args, ...)
+  # read from ...
+  purrr::list_modify(args, ...)
+  # # Extract params from matrix file
+  # if(inherits(x, "character")) {
+  #   if(endsWith(x, ".mat.gz")) {
+  #     h1 <- .read_matrix_header(x) # extract from matrix header
+  #     h2 <- rlang::list2(
+  #       sample_labels = h1$smp_labels,
+  #       group_labels  = h1$group_labels,
+  #       averageType   = h1$bin_avg_type,
+  #       bin_size      = h1$bs,
+  #       per_group     = TRUE # default
+  #     )
+  #     h <- purrr::list_modify(h2, !!!h1)
+  #   } else if(endsWith(x, "yaml")) {
+  #     h <- tryCatch(
+  #       {
+  #         yaml::read_yaml(x)
+  #       },
+  #       error = function(cond) {
+  #         message(glue::glue("Failed to YAML file: {x}"))
+  #         message(cond)
+  #         # Choose a return value in case of error
+  #         return(NULL)
+  #       }
+  #     )
+  #   } else {
+  #     h <- list()
+  #   }
+  # } else {
+  #   h <- list() # blank
+  # }
+  # # optional from config.yaml
+  # # see deeptools.plotProfile arguments
+  # ## default
+  # args_default <- list(
+  #   width         = 5,
+  #   height        = 2.5,
+  #   units         = "in",
+  #   dpi           = 300,
+  #   line_size     = 0.6,
+  #   numPlotsPerRow = 3,   # from config.yaml
+  #   overwrite     = FALSE
+  # )
+  # args1 <- purrr::list_modify(args_default, ...)
+  # # args1 <- .plot_profile_args(...) # default + custome
+  # ## renmae argument names for downstream plots
+  # args2 <- rlang::list2(
+  #   add_x_ticks_extra = FALSE,
+  #   bin_size    = args1$binSize,
+  #   plot_title  = args1$plotTitle,
+  #   start_label = args1$startLabel,
+  #   point_label = args1$refPointLabel,
+  #   end_label   = args1$endLabel,
+  #   x_title     = args1$xAxisLabel,
+  #   y_title     = args1$yAxisLabel,
+  #   y_min       = args1$yMin,
+  #   y_max       = args1$yMax,
+  #   per_group   = args1$perGroup,
+  #   group_labels  = args1$regionsLabel,
+  #   sample_labels = args1$samplesLabel,
+  #   bin_avg_type  = args1$averageType
+  # )
+  # args <- purrr::list_modify(args2, !!!args1) # modify
+  # args <- purrr::discard(args, is.null) # remove null arguments
+  # # fix colors
+  # if(inherits(args$colors, "character")) {
+  #   args$colors <- strsplit(args$colors, "\\s+", perl = TRUE) %>% unlist
+  # }
+  # # updated by optional arguments
+  # purrr::list_modify(h, !!!args) # overwrite header
+  # # purrr::list_modify(args, ...)
+}
+
+
+#' Update axis range
+#'
+#' @param x numeric values to plot on y-axis
+#' @param y_min numeric minimum on y-axis, default: NULL
+#' @param y_max numeric  maximum on y-axis, default: NULL
+#' @param ...
+#'
+#' @return numeric
+#' @export
+#'
+#' @examples
+#' update_axis_range_y(x, y_min = 0, y_max = 5)
+update_axis_range_y <- function(x, y_min = NULL, y_max = NULL) {
+  if(! inherits(x, "numeric")) {
+    message(glue::glue("Expect numbers, got {class(x)[1]}"))
+    return(NULL)
+  }
+  # s  <- summary(x) #
+  # scales::breaks_pretty(n=5)(c(min(x), max(x)))
+  breaks <- scales::breaks_extended()(c(min(x), max(x)))
+  # fix y_min and y_max
+  y_min <- min(c(y_min, head(breaks, 1), min(x)))
+  y_max <- max(c(y_max, tail(breaks, 1), max(x)))
+  # output
+  list(y_min = y_min, y_max = y_max)
+}
+
+
+# read ggplot data
+get_ggplot_layout <- function(p) {
+  if(! inherits(p, "ggplot")) {
+    message(glue::glue("Expect ggplot, got {class(p)[1]}"))
+    return(p)
+  }
+  b <- ggplot2::ggplot_build(p)
+  ## x axis
+  x_name   <- p_build$layout$panel_params[[1]]$x.sec$name         # name
+  x_limits <- p_build$layout$panel_params[[1]]$x.sec$get_limits() # limits
+  x_breaks <- p_build$layout$panel_params[[1]]$x.sec$get_breaks() # breaks
+  x_range  <- p_build$layout$panel_params[[1]]$x.range # range
+  ## y axis
+  y_name   <- p_build$layout$panel_params[[1]]$y.sec$name         # name
+  y_limits <- p_build$layout$panel_params[[1]]$y.sec$get_limits() # limits
+  y_breaks <- p_build$layout$panel_params[[1]]$y.sec$get_breaks() # breaks
+  y_range  <- p_build$layout$panel_params[[1]]$y.range # range
+}
+
+
+#' Basic profile plot
+#'
+#' This is the sub-function of `plot_profile`, the following arguments
+#' @param df data.frame is the matrix produced by `deeptools.computeMatrix`
+#'   and processed by function `read_matrix()`, contain the following
+#'   columns: x, score, sample_labels, group_labels
+#' @param x_ticks int The position of ticks on x-axis,
+#' @param x_labels character The labels on x-axis, should be identical
+#'   in length with `x_ticks`
+#' @param y_min int Manually select the minimum value of y-axis, default [NULL]
+#'   automatically generated
+#' @param y_max int As `y_min`, default [NULL]
+#' @param dashed_lines bool Whether plot dashed line on genebody/TSS/TES ticks
+#'   default [TRUE]
+#' @param color_by character Color the lines by samples or groups, choices:
+#'   sample_labels, group_labels, default [sample_lables]
+#' @param ... optional arguments
+#'
+#' @return
+#' @export
+#'
+#' @examples
+#' # generate a basic plot with config.yaml and matrix file
+#' x <- "pol2.genebody.mat.gz"
+#' df <- .read_matrix(x, bin_avg_type = "mean")
+#' plot_profile_basic(
+#'   df, x_ticks = c(0, 40, 140, 340),
+#'   x_labels = c("-2", "TSS", "TES", "+10"),
+#'   y_title = "Mean of log2(IP/input)",
+#'   x_tilte = "Genomic regions (kb)"
+#' )
+#'
+plot_profile_basic <- function(df, x_ticks, x_labels, y_min = NULL,
+                               y_max = NULL, add_dashed_lines = TRUE,
+                               color_by = "sample_labels", ...) {
+  # required data.frame
+  if(! inherits(df, "data.frame")) {
+    message(glue::glue("Expect data.frame, got {class(df)[1]}"))
+    return(NULL)
+  }
+  req_cols <- c("x", "score", "sample_labels", "group_labels")
+  if(! all(req_cols %in% colnames(df))) {
+    req_str <- paste(req_cols, collapse = ", ")
+    df_str  <- paste(colnames(df)[1:4], collapse = ", ")
+    message(glue::glue(
+      "Expect columns: {req_str}, got: [{df_str}]"
+    ))
+    return(NULL)
+  }
+  # determine y-axis
+  dots <- rlang::list2(...)
+  gar  <- update_axis_range_y(df$score, y_min, y_max)
+  # x-axis ticks, labels
+  if(! all(
+    inherits(x_ticks, "numeric"),
+    inherits(x_labels, "character"),
+    length(x_ticks) == length(x_labels)
+  )) {
+    message(glue::glue(
+      "Expect x_ticks (numeric) and x_labels (character), ",
+      "x_labels is {class(x_labels)}, ",
+      "x_ticks is {class(x_ticks)}"
+    ))
+    return(NULL)
+  }
+  # x_sect <- head(tail(x_ticks, -1), -1) # remove first, last element !!!
+  x_sect <- x_ticks[grep("[A-Z]", x_labels)]
+  # segment, x_sect from outer
+  p <- ggplot(df) # basic
+  #----------------------------------------------------------------------------#
+  # 1. Add dashed lines
+  if(isTRUE(add_dashed_lines)) {
+    if(length(x_sect) == 2) {
+      # genebody: scale-regions
+      p <- p +
+        annotate(
+          "segment",
+          x     = x_sect,
+          xend  = x_sect,
+          y     = -Inf,
+          yend  = gar$y_max,
+          color = "grey50",
+          linewidth = 0.3,
+          linetype  = "dashed"
+        )
+    } else {
+      # refpoint: reference-point
+      p <- p +
+        geom_vline(
+          xintercept = x_sect,
+          color      = "grey50",
+          linewidth  = 0.3,
+          linetype   = "dashed"
+        )
+    }
+  }
+  #----------------------------------------------------------------------------#
+  # 2. Add main lines
+  if(! color_by %in% c("group_labels", "sample_labels")) {
+    message(glue::glue(
+      "unknown `color_by=` {color_by}, ",
+      "expect [sample_labels, group_labels]"
+    ))
+    color_by <- "sample_labels"
+  }
+  p <- p +
+    geom_line(aes(x, score, color = .data[[color_by]]))
+  #----------------------------------------------------------------------------#
+  # 3. Add titles
+  dots <- rlang::list2(...)
+  x_title <- ifelse(rlang::has_name(dots, "x_title"), dots$x_title,
+                    "Genomic region (kb)")
+  y_title <- ifelse(rlang::has_name(dots, "y_title"), dots$y_title,
+                    "Score")
+  plot_title <- ifelse(rlang::has_name(dots, "plot_title"), dots$plot_title,
+                       "Profile")
+  p + labs(x = x_title, y = y_title,title = plot_title)
 }
 
 
 #' Add genebody bar on top of metaplot
 #'
-#' @param x ggplot2 plot
+#' @param x
+#' @param expand
+#' @param margin
 #' @param ...
 #'
-#' @return ggplot
+#' @return
 #' @export
 #'
 #' @examples
-#' add_genebody_bar(x)
-add_genebody_bar <- function(x, ...) {
+add_genebody_bar <- function(x, expand = 0.1, margin = 0, ...) {
   # check arguments
   if(! inherits(x, "ggplot")) {
     warning("Not a ggplot input, skipped ...")
     return(x)
   }
+  # default arguments
+  default_args <- list(
+      fill  = "grey50",
+      color = "grey50",
+      linewidth = 0.3
+  )
+  args <- purrr::list_modify(default_args, ...)
   # Extract arguments from plot
   p_build <- ggplot_build(x)
   # x axis
   x_discrete <- p_build$layout$panel_params[[1]]$x.sec$is_discrete()
-  x_breaks <- p_build$layout$panel_params[[1]]$x.sec$breaks
-  x_labels <- p_build$layout$panel_params[[1]]$x.sec$get_labels()
-  # y axis
   y_discrete <- p_build$layout$panel_params[[1]]$y.sec$is_discrete()
-  # y_range  <- p_build$layout$panel_params[[1]]$y.range
-  y_limits <- p_build$layout$panel_params[[1]]$y.sec$limits ## skipped
   # Checkpoint-2: x axis
   if(isTRUE(x_discrete) || isTRUE(y_discrete)) {
     warning(glue::glue(
@@ -240,62 +520,100 @@ add_genebody_bar <- function(x, ...) {
     ))
     return(x)
   }
-  if(! x_labels[2] == "TSS" || ! x_labels[3] %in% c("TES", "PAS")) {
-    warning("Could not found TSS--TES/PAS labels on axis")
+  # guess genebody range (TSS to TES/PAS)
+  x_breaks <- p_build$layout$panel_params[[1]]$x.sec$breaks
+  x_labels <- p_build$layout$panel_params[[1]]$x.sec$get_labels()
+  gb   <- FALSE # init
+  gb_i <- 2
+  for(i in seq_len(length(x_labels))) {
+    if(grepl("^TSS$", x_labels[i], ignore.case = TRUE)) {
+      gb <- grepl("^(TES|PAS)$", x_labels[i+1], ignore.case = TRUE)
+      if(gb) gb_i <- i
+    }
+  }
+  if(! isTRUE(gb)) {
+    message(glue::glue(
+      "Could not find genebody region on x-axis, ",
+      "expect TSS-TES, TSS-PAS",
+    ))
     return(x)
   }
+  gb_range <- x_breaks[gb_i:(gb_i + 1)]
+  # y_range <- p_build$layout$panel_params[[1]]$y.range
+  y_name   <- p_build$layout$panel_params[[1]]$y.sec$name
+  y_limits <- p_build$layout$panel_params[[1]]$y.sec$limits ## skipped
+  y_breaks <- p_build$layout$panel_params[[1]]$y.sec$get_breaks() ## skipped
+  y_labels <- p_build$layout$panel_params[[1]]$y.sec$get_labels() ## skipped
+  # Expand y-axis at y-max by 10%
+  #--------------------------#
+  # 1. update margin
+  y_limits2 <- y_limits * c(1, 1 + margin) * (1 + expand)
+  y_mg <- y_limits * c(1, 1 + margin)
+  y_gb <- y_mg[2] + diff(y_mg) * expand * c(0.1, 0.4, 0.5, 0.9)
+  #--------------------------#
+  # 1. update y-axis
+  suppressMessages(
+    # overwrite old y-axis settings # !!! side-effect ?
+    x2 <- x +
+      scale_y_continuous(
+        name = y_name,
+        breaks = y_breaks,
+        labels = y_labels,
+        limits = y_limits2
+      )
+  )
+  #--------------------------#
+  # Locate the box, lines
+  rect_h <- list(
+    "geom" = "rect",
+    "xmin" = gb_range[1],
+    "xmax" = gb_range[2],
+    "ymin" = y_gb[1],
+    "ymax" = y_gb[2]
+  )
+  seg_v <- list(
+    "geom" = "segment",
+    "x"    = gb_range[1],
+    "xend" = gb_range[1],
+    "y"    = y_gb[3],
+    "yend" = y_gb[4]
+  )
+  seg_h <- list(
+    "geom" = "segment",
+    "x"    = gb_range[1],
+    "xend" = gb_range[1] + diff(gb_range) * 0.15,
+    "y"    = y_gb[4],
+    "yend" = y_gb[4],
+    arrow = arrow(length = unit(c(0.04, 0.04), "npc"))
+  )
+  #------------------------#
+  y_name     <- p_build$layout$panel_params[[1]]$y.sec$name
+  y_range    <- p_build$layout$panel_params[[1]]$y.range
+  y_limits   <- p_build$layout$panel_params[[1]]$y.sec$limits ## skipped
+  y_breaks   <- p_build$layout$panel_params[[1]]$y.sec$get_breaks()
+  y_labels   <- p_build$layout$panel_params[[1]]$y.sec$get_labels()
   #-------------------------#
   # 1. add genebody grey bar
-  x_sect <- x_breaks[2:3] # TSS - TES
-  y_sect <- y_limits[2] * c(.92, .95)
-  p <- x +
-    annotate(
-      geom  = "rect",
-      xmin  = x_sect[1],
-      xmax  = x_sect[2],
-      ymin  = y_sect[1],
-      ymax  = y_sect[2],
-      fill  = "grey50"
-    )
+  p2 <- x2 +
+    do.call(annotate, modifyList(rect_h, args))
   # 2. add arrow (horizontal)
-  x_seg1 <- c(x_sect[1], x_sect[1] + diff(x_sect) * 0.15)
-  y_seg1 <- y_limits[2] * c(.99, .99)
-  p <- p +
-    annotate(
-      "segment",
-      x     = x_seg1[1],
-      xend  = x_seg1[2],
-      y     = y_seg1[1],
-      yend  = y_seg1[2],
-      color = "grey50",
-      linewidth = 0.3,
-      arrow = arrow(length = unit(0.02, "npc"))
-    )
-  # 3. add vertical line
-  x_seg2 <- c(x_sect[1], x_sect[1])
-  y_seg2 <- y_limits[2] * c(.95, .99)
-  p <- p +
-    annotate(
-      "segment",
-      x     = x_seg2[1],
-      xend  = x_seg2[2],
-      y     = y_seg2[1],
-      yend  = y_seg2[2],
-      color = "grey50",
-      linewidth = 0.3
-    )
-  # output
-  p
+  suppressWarnings(
+    # suppress, fill for segment()
+    p2 <- p2 +
+      do.call(annotate, modifyList(seg_v, args)) +
+      do.call(annotate, modifyList(seg_h, args))
+  )
+  p2
 }
 
 
-#' Replace X and Y axises style
+#' update X and Y axis line style
 #'
 #' 1. remove original x-axis, y-axis
 #' 2. add segment on x-axis, y-axis
 #' 3. add extra x_ticks
 #'
-#' @param x
+#' @param x ggplot
 #' @param ...
 #'
 #' @return
@@ -303,8 +621,14 @@ add_genebody_bar <- function(x, ...) {
 #'
 #' @examples
 #' add_axis_line(x)
-add_axis_line <- function(x, ...) {
-  dots <- rlang::list2(...)
+update_axis_line <- function(x, ...) {
+  # defaults arguments
+  default_args <- list(
+    linewidth = .5,
+    linetype  = "solid",
+    color     = "grey20"
+  )
+  args <- purrr::list_modify(default_args, ...)
   # check arguments
   if(! inherits(x, "ggplot")) {
     warning("Not a ggplot input, skipped ...")
@@ -315,85 +639,69 @@ add_axis_line <- function(x, ...) {
   # Extract x-axis
   x_breaks <- p_build$layout$panel_params[[1]]$x.sec$breaks
   x_breaks <- x_breaks[! is.na(x_breaks)]
-  x_labels <- p_build$layout$panel_params[[1]]$x.sec$get_labels()
-  x_limits <- p_build$layout$panel_params[[1]]$x.sec$get_limits()
-  x_name   <- p_build$layout$panel_params[[1]]$x.sec$name
-  # x_limits <- c(min(x_breaks), max(x_breaks))
-  # Extract y-axis
   y_breaks <- p_build$layout$panel_params[[1]]$y.sec$breaks
   y_breaks <- y_breaks[! is.na(y_breaks)]
-  # y_labels <- p_build$layout$panel_params[[1]]$y.sec$get_labels()
-  # y_limits <- p_build$layout$panel_params[[1]]$y.sec$get_limits()
-  # Fix axis-line
-  p <- x +
-    annotate(
-      "segment",
-      x     = -Inf,
-      xend  = tail(x_breaks, 1),
-      y     = -Inf,
-      yend  = -Inf,
-      linewidth = .5,
-      linetype  = 1,
-      color = "grey20"
-    ) +
-    annotate(
-      "segment",
-      x     = -Inf,
-      xend  = -Inf,
-      y     = -Inf,
-      yend  = tail(y_breaks, 1),
-      linewidth = 0.5,
-      linetype  = 1,
-      color = "grey20"
-    ) +
+  #-------------------------------------#
+  # axis line
+  seg_h <- list(
+    "geom" = "segment",
+    "x"    = c(-Inf, -Inf),
+    "xend" = c(tail(x_breaks, 1), -Inf),
+    "y"    = c(-Inf, -Inf),
+    "yend" = c(-Inf, tail(y_breaks, 1))
+  )
+  # add lines
+  x +
+    do.call(annotate, modifyList(seg_h, args)) +
     theme(
       axis.line  = element_blank(),
-      axis.ticks = element_line(linewidth = .3, color = "grey20")
-    )
-  # update x-axis ticks
-  if(isTRUE(dots$add_x_ticks_extra)) {
-    x_end <- tail(x_labels, 1)
-    x_end <- gsub("[^0-9]+", "", x_end) %>% as.numeric()
-    if(x_end > 2) {
-      n_ticks_extra <- floor(x_end / 2) + 1
-      t1 <- seq(rev(x_breaks)[2], rev(x_breaks)[1], length.out = n_ticks_extra)
-      t2 <- seq(0, x_end, length.out = n_ticks_extra)
-      t2 <- paste0('+', t2)
-      # remove first one
-      t1 <- t1[-1]
-      t2 <- t2[-1]
-      x_breaks_extra <- c(rev(rev(x_breaks)[-1]), t1)
-      x_labels_extra <- c(rev(rev(x_labels)[-1]), t2)
-      # update x-axis
-      message("update x-axis")
-      suppressMessages(
-        p <- p +
-          scale_x_continuous(
-            name   = x_name,
-            limits = x_limits,
-            breaks = x_breaks_extra,
-            labels = x_labels_extra,
-            expand = expansion(mult = c(0, 0))
-          )
+      axis.ticks = element_line(
+        linewidth = args$linewidth * .6, # 60% of axis line
+        color = args$color
       )
-    }
-  }
-  p
-  # x +
-  #   geom_segment(
-  #     aes(x = -Inf, xend = tail(x_breaks, 1), y = -Inf, yend = -Inf),
-  #     linewidth = .3,
-  #     color     = "grey30"
-  #   ) +
-  #   geom_segment(
-  #     aes(x = -Inf, xend = -Inf, y = -Inf, yend = tail(y_breaks, 1)),
-  #     linewidth = .3,
-  #     color     = "grey30"
-  #   ) + theme(
-  #     axis.line  = element_blank(),
-  #     axis.ticks = element_line(linewidth = .5, color = "black")
-  #   )
+    )
 }
+
+
+#' update x-axis ticks, labels
+#'
+#' update x_ticks, x_labels
+#' original:
+#' 0 40 240;
+#' "-2" "TES" "+10"
+#' updated:
+#' 0 40 80 120 160 200 240;
+#' "-2"  "TES" "+2"  "+4"  "+6"  "+8"  "+10"
+#'
+#' @param x_labels string labels
+#' @param x_ticks numeric positions on x-axis
+#' @param ...
+#'
+#' @return
+#' x_ticks, x_labels
+update_axis_ticks_x <- function(x_labels, x_ticks) {
+  # default
+  x_end <- tail(x_labels, 1)
+  x_end <- gsub("[^0-9]+", "", x_end) %>% as.numeric()
+  if(x_end > 2) {
+    n_ticks <- floor(x_end / 2) + 1
+    tes     <- tail(x_ticks, 2)
+    ticks_extra  <- seq(tes[1], tes[2], length.out = n_ticks)
+    labels_extra <- seq(0, x_end, length.out = n_ticks)
+    labels_extra <- paste0('+', labels_extra)
+    # remove first one
+    list(
+      x_ticks = c(head(x_ticks, -1), tail(ticks_extra, -1)),
+      x_labels = c(head(x_labels, -1), tail(labels_extra, -1))
+    )
+  } else {
+    list(
+      x_ticks  = x_ticks,
+      x_labels = x_labels
+    )
+  }
+}
+
 
 #----------------------------------------------------------------------------#
 
@@ -547,33 +855,21 @@ add_axis_line <- function(x, ...) {
 
 #' Generate metaplot for regions/reference-point
 #'
+#' Reference
+#' 1. Kamieniarz-Gdula, K. et al. Selective Roles of Vertebrate PCF11 in
+#' Premature and Full-Length Transcript Termination. Molecular Cell 74,
+#' 158-172.e9 (2019). doi: 10.1016/j.molcel.2019.01.027
+#' Figure 1B
+#' url: https://doi.org/10.1016/j.molcel.2019.01.027
+#'
+#' Structures of metaplot
+#'
 #' see `plotProfile` of deeptools at
 #' https://deeptools.readthedocs.io/en/develop/content/tools/plotProfile.html
 #'
-#' @param x path to the matrix file, output of `computeMatrix` in `deeptools`
+#' @param x character path to the matrix file, output of `computeMatrix`
+#'   in `deeptools`
 #' @param filename path to the plot file
-#' @param colors character List of colors to use for the plotted lines, [auto]
-#' @param plot_title character the title of the plot, default: [metaplot]
-#' @param start_label character label on start point, default [TSS]
-#' @param end_label character label on end point, default [TES]
-#' @param point_label character label on reference point, default [TSS]
-#' @param sample_labels character Labels for the samples plotted [NULL]
-#' @param group_labels character labels for regions [NULL]
-#' @param averageType character The type of statistic used for profile,
-#' options ["mean", "median", "min", "max", "sum", "std"], default ["mean"]
-#' @param x_title character Title on x axis, default ["Genomic region (kb)"]
-#' @param y_title character Title on y axis, default ["score"]
-#' @param y_min numeric Minimum value on y axis, default [auto]
-#' @param y_max numeric Maximum value on y axis, default [auto]
-#' @param overwrite bool Overwrite the exists plot file
-#' @param plot_theme character Add theme to the plot, options ["few"], default [NULL]
-#' @param width numeric Set the width of plot, default [7] inches
-#' @param height numeric Set the height of plot, default [3] inches
-#' @param units character Set the unit for plot, ["cm", "mm", "in", "px"], default [in]
-#' @param dpi numeric Plot resolution, see `ggsave()`
-#' @param perGroup bool value default TRUE
-#' @param numPlotPerRow numeric how many plots each row, default [3]
-#' @param return_data bool return the data.frame for plot
 #'
 #' @importFrom rlang list2 is_empty
 #' @importFrom purrr list_modify
@@ -584,9 +880,10 @@ add_axis_line <- function(x, ...) {
 #' @export
 plot_profile <- function(x, filename = NULL, ...) {
   # parse arugments from matrix_header + ...
-  args <- .setup_metaplot_params(x, ...) # default + ... arguments
+  args <- .setup_profile_params(x, config = NULL, ...) # ... from config?
   # loading header from matrix
   df <- .read_matrix(x, bin_avg_type = args$bin_avg_type) # averageType checked
+  #----------------------------------------------------------------------------#
   # Checkpoint-1: group labels
   group_labels <- unique(df$group_labels)
   if(inherits(args$group_labels, "character")) {
@@ -599,110 +896,74 @@ plot_profile <- function(x, filename = NULL, ...) {
   group_by <- ifelse(isTRUE(args$per_group), "group_labels", "sample_labels")
   # 3.0 determine fig numbers
   n_plots  <- length(unique(df[[group_by]]))
-  n_width  <- ifelse(n_plots > args$numPlotsPerRow, args$numPlotsPerRow, n_plots)
-  n_height <- ceiling(n_plots / args$numPlotsPerRow)
+  n_width  <- ifelse(n_plots > args$n_per_row, args$n_per_row, n_plots)
+  n_height <- ceiling(n_plots / args$n_per_row)
   width    <- n_width * args$width
   height   <- n_height * args$height
   x_sect   <- head(args$x_ticks[-1], -1) # remove first, last element
   #----------------------------------------------------------------------------#
-  # 1. Proudfoot lab metaplot
-  ## guess y_limits
-  tmp <- ggplot(df) +
-    geom_line(aes(x, score, color = .data[[color_by]])) +
-    scale_y_continuous(expand = expansion(mult = c(0.01, 0.1))) # expand 10%
-  tmp_build <- ggplot_build(tmp)
-  # tmp_x_breaks <- tmp_build$layout$panel_params[[1]]$x.sec$get_breaks()
-  tmp_y_breaks <- tmp_build$layout$panel_params[[1]]$y.sec$get_breaks()
-  tmp_y_breaks <- tmp_y_breaks[! is.na(tmp_y_breaks)]
-  y_max <- tail(tmp_y_breaks, 1) # last
-  if(inherits(args$y_max, "numeric")) {
-    if(args$y_max > y_max) y_max <- args$y_max
-  }
-  ## add vlines
-  if(args$matrix_type == "scale-regions") {
-    p <- ggplot(df) +
-      annotate(
-        "segment",
-        x     = x_sect,
-        xend  = x_sect,
-        y     = c(-Inf, -Inf),
-        yend  = rep(y_max, 2),
-        linewidth = 0.3,
-        linetype  = 2,
-        color = "grey50"
-      )
-  } else {
-    p <- ggplot(df) +
-      geom_vline(
-        xintercept = x_sect,
-        linewidth  = .3,
-        linetype   = 2,
-        color      = "grey50"
-      )
-  }
-  ## add main lines
-  p <- p +
-    geom_line(aes(x, score, color = .data[[color_by]]))
-  ## fix x-axis
+  # Checkpoint-1. basic plot
+  # p <- plot_profile_basic(df, !!!args)
+  args$df <- df
+  p <- do.call(plot_profile_basic, args)
+  #----------------------------------------------------------------------------#
+  # Checkpoint-2. update x_axis, x_ticks
   if(isTRUE(args$add_x_ticks_extra)) {
-    # update args$x_ticks
-    message("Add extra ticks on x-axis")
+    tix <- update_axis_ticks_x(args$x_labels, args$x_ticks)
+  } else {
+    tix <- list(x_ticks = args$x_ticks, x_labels = args$x_labels)
   }
   p <- p +
     scale_x_continuous(
       name   = args$x_title,
-      limits = c(args$x_ticks[1], tail(args$x_ticks, 1)),
-      breaks = args$x_ticks,
-      labels = args$x_labels,
+      limits = c(min(tix$x_ticks), max(tix$x_ticks)),
+      breaks = tix$x_ticks,
+      labels = tix$x_labels,
       expand = expansion(mult = c(0, 0))
-    ) +
-    ggtitle(args$plot_title)
-  # 2. colors
+    )
+  #----------------------------------------------------------------------------#
+  # Checkpoint-3. update axis lines and genebody-bar
+  p <- update_axis_line(p) #
+  if(args$matrix_type == "scale-regions") {
+    p <- add_genebody_bar(p)
+  }
+  # #----------------------------------------------------------------------------#
+  # # # Checkpoint-3. update y_axis, y_ticks
+  # gar <- update_axis_range_y(df$score, args$y_min, args$y_max)
+  # y_limits <- c(gar$y_min, gar$y_max * 1.1) # expand
+  # suppressMessages(
+  #   p <- p +
+  #     scale_y_continuous(
+  #       name   = args$y_title,
+  #       limits = y_limits,
+  #       expand = expansion(mult = c(0.01, 0)) # already expanded
+  #     )
+  # )
+  #----------------------------------------------------------------------------#
+  # Checkpoint-4. colors + themes
   n_colors <- length(unique(df[[color_by]]))
   if(inherits(args$colors, "character")) {
     colors <- rep(args$colors, 100)[1:n_colors] #
     p <- p + scale_color_manual(values = colors)
   }
-  # 3. update y-axis limits
-  ## update: y-axis limits
-  # extract y axis range from plot
-  p_build  <- ggplot2::ggplot_build(p)
-  # y_limits <- p_build$layout$panel_params[[1]]$y.sec$get_limits() # limits
-  y_limits  <- p_build$layout$panel_params[[1]]$y.range # range
-  y_limits[2] <- y_limits[2] * 1.1 # expand y-axis upper 10%
-  if(inherits(args$y_min, "numeric")) {
-    y_limits[1] <- args$y_min
-  }
-  if(inherits(args$y_max, "numeric")) {
-    y_limits[2] <- args$y_max
-  }
+  # add themes
   p <- p +
-    scale_y_continuous(
-      name   = args$y_title,
-      limits = y_limits,
-      expand = expansion(mult = c(0.01, 0)) # already expanded
+    theme_classic() +
+    theme(
+      # panel.border = element_blank(),
+      # panel.grid = element_blank(),
+      # rect       = element_blank(),
+      axis.text  = element_text(color = "black"),
+      axis.line  = element_blank()
+      # axis.ticks = element_line(linewidth = .4, color = "grey30"),
     )
   # 4. Facet by group_labels
   if(length(group_labels) > 1) {
     p <- p +
       facet_wrap(as.formula(paste("~", group_by)), ncol = n_width)
   }
-  # 5. theme
-  p <- p +
-    theme_classic() +
-    theme(
-      panel.grid = element_blank(),
-      rect       = element_blank(),
-      axis.line  = element_line(linewidth = .8, color = "black"),
-      axis.ticks = element_line(linewidth = .8, color = "black"),
-      axis.text  = element_text(color = "black")
-    )
-  # 6. add genebody bar: for scale-regions
-  p <- add_axis_line(p, add_x_ticks_extra = args$add_x_ticks_extra) #
-  if(args$matrix_type == "scale-regions") {
-    p <- add_genebody_bar(p)
-  }
-  # 7. save to files
+  #----------------------------------------------------------------------------#
+  # Checkpoint-6. save plot to file
   if(inherits(filename, "character")) {
     if(file.exists(filename) && ! isTRUE(args$overwrite)) {
       message(glue::glue("file exists: {filename}"))
@@ -720,7 +981,8 @@ plot_profile <- function(x, filename = NULL, ...) {
       saveRDS(p, file = rds)
     }
   }
-  p # return
+  # output
+  p
 }
 
 
@@ -844,9 +1106,9 @@ plot_profile_ss <- function(x1, x2,  filename = NULL, ...) {
 # x2 = '/data/yulab/wangming/work/yu_2022/projects/20221229_dlj_ChrRNA_yy218/results/flanking_genes/results/fig1.gs_6k/2.bw2matrix/fig1.ChrRNA_YY218.gs_6k_anti.mat.gz'
 # x = "data/config/metaplot/paused_all/fig1A/fig1.A.ChIP_8WG16_60m.metaplot.tss.yaml"
 
-# x = "results/metaplot/paused_all/fig1A/2.bw2matrix/fig1.A.ChIP_8WG16_60m.genebody.mat.gz"
-# (p <- plot_profile(x, filename = "tmp.cnt.pdf", colors = c("black", "red"), add_x_ticks_extra = T))
+am = "results/metaplot/paused_all/fig1A/2.bw2matrix/fig1.A.ChIP_8WG16_60m.genebody.mat.gz"
+# (p <- plot_profile(am, filename = "tmp.cnt.pdf", colors = c("black", "red"), overwrite = T, add_x_ticks_extra = T))
 
-x = "data/config/metaplot/paused_all/fig1A/fig1.A.ChIP_8WG16_60m.metaplot.tes.yaml"
-make_metaplot(x, overwrite = T, add_x_ticks_extra = T)
+ay = "data/config/metaplot/paused_all/fig1A/fig1.A.ChIP_8WG16_60m.metaplot.genebody.yaml"
+# make_metaplot(ay, overwrite = T, add_x_ticks_extra = T)
 
