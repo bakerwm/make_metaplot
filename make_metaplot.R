@@ -381,49 +381,74 @@ fix_axis_ticks <- function(x, y_min = NULL, y_max = NULL) {
   #------------------------------------------#
   # check ticks/breaks on axis
   axis <- get_ggplot_axis(x)
-  if(any(is.na(axis$y_breaks))) {
-    y_limits <- axis$y_limits
-    y_breaks <- scales::breaks_extended()(axis$y_limits)
-    y_limits <- c(
-      min(y_limits, y_breaks, y_min),
-      max(y_limits, y_breaks, y_max)
-    )
-    ## update all
-    y_breaks <- scales::breaks_extended(only.loose = TRUE)(y_limits) # updated
-    y_limits <- c(
-      min(y_limits, y_breaks, y_min),
-      max(y_limits, y_breaks, y_max)
-    )
-    # fix digits
-    n_digits <- max(count_digits(y_breaks))
-    accuracy <- 10^(- n_digits)
-    # update y-axis
-    suppressMessages(
-      x +
-        scale_y_continuous(
-          limits = y_limits,
-          breaks = y_breaks,
-          labels = scales::number_format(accuracy = accuracy),
-          expand = expansion(mult = c(0, 0.06))
-        )
-    )
-  } else {
-    y_limits <- axis$y_limits
-    y_breaks <- axis$y_breaks
-    y_limits <- c(min(y_limits, y_breaks), max(y_limits, y_breaks))
-    # fix digits
-    n_digits <- max(count_digits(y_breaks))
-    accuracy <- 10^(- n_digits)
-    suppressMessages(
-      x +
-        scale_y_continuous(
-          limits = y_limits,
-          breaks = y_breaks,
-          labels = scales::number_format(accuracy = accuracy) ,
-          expand = expansion(mult = c(0, 0.06))
-        )
-    )
-  }
+  y_breaks <- purrr::discard(axis$y_breaks, is.na)
+  y_limits <- axis$y_limits
+  y_limits <- c(
+    min(y_limits, y_breaks, y_min),
+    max(y_limits, y_breaks, y_max)
+  )
+  y_breaks <- scales::breaks_extended(only.loose = TRUE)(y_limits)
+  y_limits <- c(
+    min(y_limits, y_breaks, y_min),
+    max(y_limits, y_breaks, y_max)
+  )
+  # fix digits
+  n_digits <- max(count_digits(y_breaks))
+  accuracy <- 10^(- n_digits)
+  # update y-axis
+  suppressMessages(
+    x +
+      scale_y_continuous(
+        limits = y_limits,
+        breaks = y_breaks,
+        labels = scales::number_format(accuracy = accuracy),
+        expand = expansion(mult = c(0, 0.06))
+      )
+  )
+  # if(any(is.na(axis$y_breaks))) {
+  #   y_limits <- axis$y_limits
+  #   y_breaks <- scales::breaks_extended()(axis$y_limits)
+  #   y_limits <- c(
+  #     min(y_limits, y_breaks, y_min),
+  #     max(y_limits, y_breaks, y_max)
+  #   )
+  #   ## update all
+  #   y_breaks <- scales::breaks_extended(only.loose = TRUE)(y_limits) # updated
+  #   y_limits <- c(
+  #     min(y_limits, y_breaks, y_min),
+  #     max(y_limits, y_breaks, y_max)
+  #   )
+  #   # fix digits
+  #   n_digits <- max(count_digits(y_breaks))
+  #   accuracy <- 10^(- n_digits)
+  #   # update y-axis
+  #   suppressMessages(
+  #     x +
+  #       scale_y_continuous(
+  #         limits = y_limits,
+  #         breaks = y_breaks,
+  #         labels = scales::number_format(accuracy = accuracy),
+  #         expand = expansion(mult = c(0, 0.06))
+  #       )
+  #   )
+  # } else {
+  #   y_limits <- axis$y_limits
+  #   y_breaks <- axis$y_breaks
+  #   y_limits <- c(min(y_limits, y_breaks), max(y_limits, y_breaks))
+  #
+  #   # fix digits
+  #   n_digits <- max(count_digits(y_breaks))
+  #   accuracy <- 10^(- n_digits)
+  #   suppressMessages(
+  #     x +
+  #       scale_y_continuous(
+  #         limits = y_limits,
+  #         breaks = y_breaks,
+  #         labels = scales::number_format(accuracy = accuracy) ,
+  #         expand = expansion(mult = c(0, 0.06))
+  #       )
+  #   )
+  # }
 }
 
 
@@ -613,9 +638,9 @@ add_genebody_bar <- function(x, expand = 0.1, margin = 0, ...) {
   # Expand y-axis at y-max by 10%
   #--------------------------#
   # 1. update margin
-  y_limits2 <- y_limits * c(1, 1 + margin) * (1 + expand)
   y_mg <- y_limits * c(1, 1 + margin)
-  y_gb <- y_mg[2] + diff(y_mg) * expand * c(0.1, 0.4, 0.5, 0.9)
+  y_limits2 <- c(y_mg[1], y_mg[2] + abs(diff(y_mg)) * expand)
+  y_gb <- y_mg[2] + abs(diff(y_mg)) * expand * c(0.1, 0.4, 0.5, 0.9)
   #--------------------------#
   # 1. update y-axis
   suppressMessages(
@@ -972,6 +997,7 @@ plot_profile <- function(m, filename = NULL, ...) {
   # Checkpoint-1. basic plot
   # p <- plot_profile_basic(df, !!!args)
   args$df <- df
+  args$color_by <- color_by
   p <- do.call(plot_profile_basic, args)
   #----------------------------------------------------------------------------#
   # Checkpoint-2. update x_axis, x_ticks
@@ -1185,4 +1211,7 @@ plot_profile_ss <- function(x1, x2,  filename = NULL, ...) {
 
 # ay = "data/config/metaplot/paused_all/fig1A/fig1.A.ChIP_8WG16_60m.metaplot.tes.yaml"
 # make_metaplot(ay, overwrite = T, add_x_ticks_extra = T)
+
+# am = "results/metaplot/paused_all/fig1E/2.bw2matrix/fig1.E.CnT_Ser2P_vs_total.genebody.mat.gz"
+# ay = "data/config/metaplot/paused_all/fig1E/fig1.E.CnT_Ser2P_vs_total.metaplot.genebody.yaml"
 
