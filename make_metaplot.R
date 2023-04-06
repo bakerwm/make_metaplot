@@ -670,8 +670,11 @@ update_axis_ticks_x <- function(x, x_breaks = NULL, x_labels = NULL,
         labels_extra <- seq(0, x_end[2], length.out = n_breaks)
         labels_extra <- paste0('+', labels_extra)
         # remove first one
-        axis$x_breaks <- c(head(x_breaks, -1), tail(breaks_extra, -1))
-        axis$x_labels <- c(head(x_labels, -1), tail(labels_extra, -1))
+        # skip if more than 8 breaks detected.
+        if(n_breaks < 8) {
+          axis$x_breaks <- c(head(x_breaks, -1), tail(breaks_extra, -1))
+          axis$x_labels <- c(head(x_labels, -1), tail(labels_extra, -1))
+        }
       }
     }
   }
