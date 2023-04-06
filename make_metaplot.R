@@ -14,7 +14,7 @@ suppressPackageStartupMessages(library(hiseqr))
 #'
 #' @export
 make_metaplot <- function(x, ...) {
-  args <- .setup_profile_params(m = NULL, config = x, ...)
+  args <- .setup_profile_params(config = x, ...)
   # 4. output
   out_dir <- ifelse(rlang::has_name(args, "out_dir"), args$out_dir, "./")
   prefix  <- ifelse(rlang::has_name(args, "prefix"), args$prefix, "metaplot")
@@ -1182,39 +1182,50 @@ plot_profile_ss <- function(m1, m2,  filename = NULL, ...) {
   # parse arugments from matrix_header + ...
   args <- .setup_profile_params(m = m1, config = NULL, ...) # ... from config?
   #----------------------------------------------------------------------------#
-  # loading matrix from file
+  # 0. Loading matrix from file
+  # sample_labels were saved in matrix header, group_labels not !!!
+  # update group_labels by values from args
+  # sens
   df1 <- .read_matrix(x = m1, bin_avg_type = args$bin_avg_type) # sene
+  h1  <- .read_matrix_header(m1)
+  if(length(unique(df1$group_labels)) == length(h1$group_labels)) {
+    gl  <- setNames(args$group_labels, nm = unique(df1$group_labels))
+    df1 <- dplyr::mutate(df1, group_labels = gl[group_labels])
+  }
+  # anti
   df2 <- .read_matrix(x = m2, bin_avg_type = args$bin_avg_type) # anti
+  h2  <- .read_matrix_header(m2)
+  if(length(unique(df2$group_labels)) == length(h2$group_labels)) {
+    gl  <- setNames(args$group_labels, nm = unique(df2$group_labels))
+    df2 <- dplyr::mutate(df2, group_labels = gl[group_labels])
+  }
+  df2 <- dplyr::mutate(df2, score = -score)
   #----------------------------------------------------------------------------#
-  # 1. Update `color_by` column
+  # 1. Update `color_by` column; add `_fwd` and `_rev` suffix
   color_by <- ifelse(isTRUE(args$per_group), "sample_labels", "group_labels")
-  df1 <- dplyr::mutate(df1, !!color_by := paste0(.data[[color_by]], "_fwd"))
-  df2 <- dplyr::mutate(
-    df2,
-    !!color_by := paste0(.data[[color_by]], "_rev"),
-    score = -score
-  )
-  df <- dplyr::bind_rows(df1, df2)
+  df1x <- dplyr::mutate(df1, !!color_by := paste0(.data[[color_by]], "_fwd"))
+  df2x <- dplyr::mutate(df2, !!color_by := paste0(.data[[color_by]], "_rev"))
   # factor
   lv <- paste0(
     rep(args[[color_by]], times = 2),
     rep(c("_fwd", "_rev"), each = length(args[[color_by]]))
   )
-  df <- dplyr::mutate(
-    df, !!color_by := factor(.data[[color_by]], levels = lv)
-  )
-  #----------------------------------------------------------------------------#
-  # 2. Update `group_by` column
-  group_by <- ifelse(isTRUE(args$per_group), "group_labels", "sample_labels")
-  group_labels <- unique(df[[group_by]])
-  if(inherits(args$group_labels, "character")) {
-    if(length(args$group_labels) == length(group_labels)) {
-      gl <- setNames(object = args$group_labels, nm = group_labels)
-      df[[group_by]] <- gl[df[[group_by]]]
-    }
-  }
+  df <- dplyr::bind_rows(df1x, df2x) %>%
+    dplyr::mutate(
+      !!color_by := factor(.data[[color_by]], levels = lv)
+    )
+  # #----------------------------------------------------------------------------#
+  # # 2. Update `group_by` column
+  # group_labels <- unique(df[[group_by]])
+  # if(inherits(args$group_labels, "character")) {
+  #   if(length(args$group_labels) == length(group_labels)) {
+  #     gl <- setNames(object = args$group_labels, nm = group_labels)
+  #     df[[group_by]] <- gl[df[[group_by]]]
+  #   }
+  # }
   #----------------------------------------------------------------------------#
   # 3.Determine fig arguments
+  group_by <- ifelse(isTRUE(args$per_group), "group_labels", "sample_labels")
   n_plots  <- length(unique(df[[group_by]]))
   n_width  <- ifelse(n_plots > args$n_per_row, args$n_per_row, n_plots)
   n_height <- ceiling(n_plots / args$n_per_row)
@@ -1260,9 +1271,10 @@ plot_profile_ss <- function(m1, m2,  filename = NULL, ...) {
   p <- theme_metaplot(p)
   #----------------------------------------------------------------------------#
   # Checkpoint-6. Facet for multiple groups
-  if(length(group_labels) > 1) {
+  if(n_plots > 1) {
     p <- p +
-      facet_wrap(as.formula(paste("~", group_by)), ncol = n_width)
+      facet_wrap(as.formula(paste("~", group_by)), ncol = n_width,
+                 scales = "free")
   }
   #----------------------------------------------------------------------------#
   # Checkpoint-7. Save to PDF
