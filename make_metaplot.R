@@ -109,7 +109,8 @@ make_metaplot <- function(x, ...) {
     per_group  = TRUE, # from config.yaml
     plot_title = "metaplot",
     overwrite  = FALSE,
-    add_x_ticks_extra = FALSE
+    add_x_ticks_extra = FALSE,
+    add_genebody_bar  = TRUE
   )
   purrr::list_modify(args, ...) # items of list to environment
 }
@@ -748,7 +749,7 @@ update_axis_line <- function(x, ...) {
 #' @export
 #'
 #' @examples
-add_genebody_bar <- function(x, expand = 0.1, margin = 0, ...) {
+update_genebody_bar <- function(x, expand = 0.1, margin = 0, ...) {
   #----------------------------------------------------------------------------#
   # Check arguments
   if(! inherits(x, "ggplot")) {
@@ -772,7 +773,7 @@ add_genebody_bar <- function(x, expand = 0.1, margin = 0, ...) {
     warning(glue::glue(
       "Expect numeric axises: x-axis: ",
       "{! args$x_discrete}, y-axis: {! args$y_discrete}, ",
-      "add_genebody_bar() skipped..."
+      "update_genebody_bar() skipped..."
     ))
     return(x)
   }
@@ -1141,8 +1142,8 @@ plot_profile <- function(m, filename = NULL, ...) {
   p <- update_axis_line(p, linewidth = axis_linewidth, color = axis_color) #
   #----------------------------------------------------------------------------#
   # Checkpoint-3. Update genebody-bar
-  if(args$matrix_type == "scale-regions") {
-    p <- add_genebody_bar(p, expand = .1, margin = 0)
+  if(args$matrix_type == "scale-regions" & isTRUE(args$add_genebody_bar)) {
+    p <- update_genebody_bar(p, expand = .1, margin = 0)
   }
   #----------------------------------------------------------------------------#
   # Checkpoint-4. Update colors for main lines
@@ -1248,8 +1249,8 @@ plot_profile_ss <- function(m1, m2,  filename = NULL, ...) {
   p <- update_axis_line(p, linewidth = axis_linewidth, color = axis_color) #
   #----------------------------------------------------------------------------#
   # Checkpoint-3. Update genebody-bar
-  if(args$matrix_type == "scale-regions") {
-    p <- add_genebody_bar(p, expand = .1, margin = 0)
+  if(args$matrix_type == "scale-regions" & isTRUE(args$add_genebody_bar)) {
+    p <- update_genebody_bar(p, expand = .1, margin = 0)
   }
   #----------------------------------------------------------------------------#
   # Checkpoint-4. Update colors for main lines
