@@ -127,7 +127,8 @@ make_metaplot <- function(x, ...) {
 #' count_digits(c(0.1, 0.02))
 count_digits <- function(x) {
   sapply(x, function(i) {
-    if(i %% 1 != 0) {
+    # if(i %% 1 != 0) {
+    if(i %% 1 > 1e-5) {
       s <- strsplit(gsub("0+$", "", as.character(i)), ".", fixed = TRUE)
       nchar(unlist(s)[2])
     } else {
@@ -598,6 +599,7 @@ plot_profile_basic <- function(df, x_breaks = NULL, x_labels = NULL,
   y_breaks <- scales::breaks_extended(only.loose = TRUE)(y_limits)
   y_limits2 <- c(min(y_limits, y_breaks), max(y_limits, y_breaks)) # updated
   n_digits <- count_digits(y_breaks)
+  n_digits <- n_digits[! is.na(n_digits)]
   accuracy <- 10^(-max(n_digits))
   p <- p +
     scale_y_continuous(
@@ -805,6 +807,7 @@ update_genebody_bar <- function(x, expand = 0.1, margin = 0, ...) {
   # update limits
   # y_limits2 <- c(min(y_limits, y_breaks), max(y_limits, y_breaks))
   n_digits  <- max(count_digits(axis$y_breaks)) # fix digits width
+  n_digits  <- n_digits[! is.na(n_digits)]
   accuracy  <- 10^(- n_digits)
   #--------------------------#
   # 3.1 update y-axis ticks
