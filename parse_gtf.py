@@ -4,6 +4,12 @@
 Parse genome annotation file (GTF), Ensembl, Gencode
 optional: BED6, BED12 or BED15 format?
 
+Filtering
+1. by feature (gene)
+2. by flanking distance
+3. by biotype (protein_coding) 
+4. by gene_size 
+
 # for Ensembl-release 102; Gencode release-M25
 # 110 genes were duplicated
 # 
