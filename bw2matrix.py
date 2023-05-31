@@ -190,6 +190,7 @@ class Bw2matrix_ns(object):
             '-o {}'.format(self.matrix),
             '--outFileNameMatrix {}'.format(self.matrix_value),
             '--outFileSortedRegions {}'.format(self.sorted_regions_file),
+            '--numberOfProcessors {}'.format(self.numberOfProcessors),
             dline,            
             '1> {}'.format(self.stdout),
             '2> {}'.format(self.stderr),
