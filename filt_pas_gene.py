@@ -17,11 +17,11 @@ gene annotations: https://www.gencodegenes.org/. This annotation includes
 57820 genes (20345 protein-coding, 37475 non-coding). For downstream analysis,
 we selected a subset of 11947 genes (9095 protein-coding, 2852 non-coding) 
 that satisfied all of the following 3 criteria: 1) had at least one active
-PAS (see 30 mRNA-seq analysis below for details); 2) did not overlap with 
-another annotated gene on the same strand; 3) had a 30 end isolated by at 
+PAS (see 3' mRNA-seq analysis below for details); 2) did not overlap with 
+another annotated gene on the same strand; 3) had a 3' end isolated by at 
 least 6 kb from the downstream annotated gene on the same strand. Those 
 strand-specific isolation criteria allowed to unambiguously assign the 
-directional RNA-seq signal (chrRNA-seq, mNET-seq and 30 mRNA-seq) to the 
+directional RNA-seq signal (chrRNA-seq, mNET-seq and 3' mRNA-seq) to the 
 end of each gene, and also to compute distal alternative polyadenylation 
 (APA) downstream of annotated gene ends (see below). 6 kb isolation was
 used because visual inspection of the data in genome browser revealed 
@@ -29,8 +29,8 @@ usage of cryptic non-annotated PASs used upon PCF11 depletion within
 this window. For meta-profiles and heatmaps, a subset of protein-coding
 genes longer that 5 kb was used (n = 8389), or a further subset of those 
 as indicated in the figure legend. For calculation of distances between 
-genes (Figures 4 and 7) the downstream distance from the gene’s 30 
-end to any other annotated gene end (50 or 30) on either strand was computed.
+genes (Figures 4 and 7) the downstream distance from the gene's 30 
+end to any other annotated gene end (5' or 3') on either strand was computed.
 """
 
 import os
