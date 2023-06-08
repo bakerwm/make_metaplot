@@ -1,3 +1,6 @@
+#!/usr/bin/bash
+
+# Name: hts_y2h, high throughput sequencing for Yeast 2 Hybrid
 # Date: 2023-06-07
 # Author: Wang Ming
 # version: 1.0
@@ -19,11 +22,72 @@
 # 3. remove vector: remove AD/BD vector sequence from 3' end of each read (minlen=20)
 # 4. pairing read12: output format, ID,read1_seq,read2_seq
 
+## required tools
+## cutadapt, hisat2, samtools 
+## python modules: pytabix
 
+################################################################################
+## Global variables
 CPU=16
+HG38_IDX="/data/yulab/hiseq001/data/genome/hg38/hisat2_index/hg38"
+GENE_BED="/data/yulab/hiseq001/user/wangming/hts_y2h/data/db/Homo_sapiens.GRCh38.106.gene.bed.gz"
+SRC_DIR=$(dirname $(realpath -s $0)) # path to current scirpt
+ANNO_PY="${SRC_DIR}/anno_bed.py"
+# [[ ! -f ${ANNO_PY} ]] && echo "script not found: ${ANNO_PY}" && exit 1
+# [[ ! -f ${GENE_BED} ]] && echo "hg38 gene bed not found: ${GENE_BED}" && exit 1
+# [[ ! -f ${HG38_IDX}.1.ht2 ]] && echo "hisat2 index not found: ${HG38_IDX}" && exit 1
+
 ################################################################################
 ## modules
 ## SE mode
+function has_command() {
+    if command -v $1 >/dev/null 2>&1
+    then 
+        echo "yes"
+    else
+        echo "no"
+    fi
+}
+export -f has_command
+
+
+function has_pymodule() {
+    if python -c "import $1" &>/dev/null
+    then 
+        echo "yes"
+    else
+        echo "no"
+    fi
+}
+export -f has_pymodule
+
+
+function check_commands() {
+    >&2 echo "------------------------------"
+    >&2 echo "Required tools:"
+    for cmd in cutadapt hisat2 samtools 
+    do 
+        ss=$(has_command ${cmd})
+        >&2 printf "%4s : %-12s : %s\n" ${ss} ${cmd} $(which ${cmd})
+        echo ${ss}
+    done 
+    # python module
+    pp=$(has_pymodule "tabix")
+    >&2 printf "%4s : %-12s : %s\n" ${pp} "tabix" "python module 'pytabix'"
+    echo ${pp}
+    # genome files
+    [[ -f ${ANNO_PY} ]] && f1="yes" || f1="no"
+    [[ -f ${GENE_BED} ]] && f2="yes" || f2="no"
+    [[ -f ${HG38_IDX}.1.ht2 ]] && f3="yes" || f3="no"    
+    >&2 printf "%4s : %-12s : %s\n" ${f1} "anno_py" ${ANNO_PY}
+    >&2 printf "%4s : %-12s : %s\n" ${f2} "gene_bed" "${GENE_BED}"
+    >&2 printf "%4s : %-12s : %s\n" ${f3} "hisat2_index" "${HG38_IDX}"
+    >&2 echo "------------------------------"
+    echo ${f1} ${f2} ${f3}
+}
+export -f check_commands
+
+
 function trim_attL() {
     local out_dir=$1
     local fq_in=$2
@@ -65,14 +129,12 @@ function trim_vec() {
 export -f trim_vec
 
 
-
-
 # Annotate fq, by gene_name/gene_id/NULL ...
 # human library
 function align_hg38() {
     local out_dir=$1
     local fq=$2 # fasta
-    local idx="/data/yulab/hiseq001/data/genome/hg38/hisat2_index/hg38"
+    ## Global variable: HG38_IDX
     local fname=$(basename ${fq/.fq.gz})
     local bam="${out_dir}/${fname}.bam"
     local bed="${bam/.bam/.bed}"
@@ -80,7 +142,7 @@ function align_hg38() {
     # [[ -f ${bam} ]] && echo "file exists: ${bam}" && return 1
     [[ ! -d ${out_dir} ]] && mkdir -p ${out_dir}
     [[ ! -f ${bam} ]] && \
-        hisat2 -p ${CPU} --very-sensitive --add-chrname -x ${idx} -U ${fq} 2> ${log} | \
+        hisat2 -p ${CPU} --very-sensitive --add-chrname -x ${HG38_IDX} -U ${fq} 2> ${log} | \
         samtools view -Sub -F 0x4 -F 2048 -q 10 - | \
         samtools sort -@ ${CPU} -o ${bam} - && \
         samtools index ${bam}
@@ -98,10 +160,11 @@ function anno_bed() {
     local bname=$(basename ${in_bed/.bed/.anno.bed})
     local out_bed="${out_dir}/${bname}" # output 
     [[ ! -d ${out_dir} ]] && mkdir -p ${out_dir}
+    ## Global variables: ANNO_PY, GENE_BED
     # GRCh38, all genes
-    local gene_bed="/data/yulab/hiseq001/user/wangming/0606_dnaseq/data/db/Homo_sapiens.GRCh38.106.gene.bed.gz"
-    local anno_py="/data/yulab/hiseq001/user/wangming/0606_dnaseq/scripts/anno_bed.py"
-    [[ ! -f ${out_bed} ]] && python ${anno_py} ${gene_bed} ${in_bed} ${out_bed}
+    # local GENE_BED="/data/yulab/hiseq001/user/wangming/hts_y2h/data/db/Homo_sapiens.GRCh38.106.gene.bed.gz"
+    # local ANNO_PY="/data/yulab/hiseq001/user/wangming/hts_y2h/scripts/anno_bed.py"
+    [[ ! -f ${out_bed} ]] && python ${ANNO_PY} ${GENE_BED} ${in_bed} ${out_bed}
 }
 export -f anno_bed
 
@@ -205,106 +268,10 @@ function main() {
 
     # 5. finish
     echo "Finish!"
-
-
-    # # 3. pairing read12: output as fasta format
-    # out_dir3="${out_dir}/3.pairing_read12"
-    # r1_name=$(basename ${fq1/.fq.gz})
-    # r2_name=$(basename ${fq2/.fq.gz})
-    # fq1s="${out_dir2}/${r1_name}_1s.fq.gz"
-    # fq1a="${out_dir2}/${r1_name}_1a.fq.gz"
-    # fq2s="${out_dir2}/${r2_name}_2s.fq.gz"
-    # fq2a="${out_dir2}/${r2_name}_2a.fq.gz"
-    # ## 1s + 2a
-    # merge_fq_by_id ${out_dir3} ${fq1s} ${fq2a}
-    # ## 1a + 2s
-    # merge_fq_by_id ${out_dir3} ${fq1a} ${fq2s}
-
 }
 export -f main
 
-[[ $# -lt 3 ]] && echo "Usage: find_ad_bd.sh <out_dir> <fq1> <fq2>" && exit 1
+[[ $# -lt 3 ]] && echo "Usage: hts_y2h.sh <out_dir> <fq1> <fq2>" && exit 1
+status=$(check_commands)
+[[ ${status} = *no* ]] && echo "!!! error, check above missing files" && exit 1
 main $1 $2 $3
-
-
-# ## 1. fetch attL
-# ## 2. remove attL
-# out_dir1="results3/1.trim_attL"
-# sens="GTGCCAGGGCGTGCCCTTGAGTTCTCTCAGTTG"
-# anti="CAACTGAGAGAACTCAAGGGCACGCCCTGGCAC"
-# r1="data/raw_data/ATAC_100mixlib_3hIP_rep1_1.fq.gz"
-# r2="data/raw_data/ATAC_100mixlib_3hIP_rep1_2.fq.gz"
-# mkdir -p ${out_dir1}
-
-# ## 1s,read1,sens
-# out_1s="$out_dir1/$(basename ${r1/.fq.gz/_1s.fq.gz})"
-# log1s="$out_dir1/$(basename ${r1/.fq.gz/_1s.cutadapt.log})"
-# [[ ! -f ${out_1s} ]] && \
-#     cutadapt -j 8 --action trim --discard-untrimmed -O 33 -e 0.1 -m 69 -n 1 -a ${sens} -o ${out_1s} ${r1} > ${log1s}
-# ## 2a,read2,anti
-# out_2a="$out_dir1/$(basename ${r2/.fq.gz/_2a.fq.gz})"
-# log2a="$out_dir1/$(basename ${r1/.fq.gz/_2a.cutadapt.log})"
-# [[ ! -f ${out_2a} ]] && \
-#     cutadapt -j 8 --action trim --discard-untrimmed -O 33 -e 0.1 -m 69 -n 1 -a ${anti} -o ${out_2a} ${r2} > ${log2a}
-
-# ## 1a,read1,anti
-# out_1a="$out_dir1/$(basename ${r1/.fq.gz/_1a.fq.gz})"
-# log1a="$out_dir1/$(basename ${r1/.fq.gz/_1a.cutadapt.log})"
-# [[ ! -f ${out_1a} ]] && \
-#     cutadapt -j 8 --action trim --discard-untrimmed -O 33 -e 0.1 -m 69 -n 1 -a ${anti} -o ${out_1a} ${r1} > ${log1a}
-# ## 2s,read2,sens
-# out_2s="$out_dir1/$(basename ${r2/.fq.gz/_2s.fq.gz})"
-# log2s="$out_dir1/$(basename ${r1/.fq.gz/_2s.cutadapt.log})"
-# [[ ! -f ${out_2s} ]] && \
-#     cutadapt -j 8 --action trim --discard-untrimmed -O 33 -e 0.1 -m 69 -n 1 -a ${sens} -o ${out_2s} ${r2} > ${log2s}
-
-
-# ################################################################################
-# ## 3. remove vector
-# out_dir2="results3/2.trim_vector"
-# vec_1="TAGAACCCAGCTTTCTTGTACAAAGTGGTGAGCTTGGGCCCGTTTAAAC" # AD
-# vec_2="GATTATAAGGATGACGACGATAAAGGGCACTCGAGATATCTAGACCCAGCTTTCTTGTACAAAGTGGTGAGCTC" # BD
-# mkdir -p ${out_dir2}
-
-# function trim_vec() {
-#     local fq=$1
-#     local out_dir=$2
-#     local out="${out_dir}/$(basename ${fq})"
-#     local log=${out/.fq.gz/.cutadapt.log}
-#     [[ -f ${out} ]] && echo "file exists: ${out}" && return 1
-#     mkdir -p ${out_dir}
-#     cutadapt -j 8 --discard-untrimmed -O 12 -e 0.1 -m 20 -n 2 -a ${vec_1} -a ${vec_2} -o ${out} ${fq} > ${log}
-# }
-# export -f trim_vec
-
-# for a in ${out_dir1}/*gz
-# do
-#     trim_vec $a ${out_dir2}	
-# done
-
-
-# ################################################################################
-# ## 4. pairing read12
-# out_dir3="results3/3.pairing_read12"
-# mkdir -p ${out_dir3}
-# ## 1s+2a
-# bash merge_fq.sh ${out_dir3} ${out_dir2}/*1s.fq.gz ${out_dir2}/*2a.fq.gz
-# ## 1a+2s
-# bash merge_fq.sh ${out_dir3} ${out_dir2}/*1a.fq.gz ${out_dir2}/*2s.fq.gz
-
-
-# # 
-# # 
-# # cutadapt -j 8 --rc --action trim --discard-untrimmed -O 33 -e 0.1 -m 69 -n 2 -a GTGCCAGGGCGTGCCCTTGAGTTCTCTCAGTTG -o result2/ATAC_100mixlib_3hIP_rep1_3_1.fq.gz data/raw_data/ATAC_100mixlib_3hIP_rep1_1.fq.gz > ATAC_100mixlib_3hIP_rep1_3_1.cutadapt.log 
-# # 
-# # ## 2a,read2,anti
-# # 
-# # 
-# # ## 1a,read1,anti
-# # ## 2s,read2,sens
-# # 
-# # cutadapt -j 8 --rc --action trim --discard-untrimmed -O 33 -e 0.1 -m 69 -n 2 -a CAACTGAGAGAACTCAAGGGCACGCCCTGGCAC -o result2/ATAC_100mixlib_3hIP_rep1_5_1.fq.gz data/raw_data/ATAC_100mixlib_3hIP_rep1_1.fq.gz > ATAC_100mixlib_3hIP_rep1_5_1.cutadapt.log 
-# # 
-# # cutadapt -j 8 --rc --action trim --discard-untrimmed -O 33 -e 0.1 -m 69 -n 2 -a GTGCCAGGGCGTGCCCTTGAGTTCTCTCAGTTG -o result2/ATAC_100mixlib_3hIP_rep1_3_2.fq.gz data/raw_data/ATAC_100mixlib_3hIP_rep1_2.fq.gz > ATAC_100mixlib_3hIP_rep1_3_2.cutadapt.log
-# # 
-# # cutadapt -j 8 --rc --action trim --discard-untrimmed -O 33 -e 0.1 -m 69 -n 2 -a CAACTGAGAGAACTCAAGGGCACGCCCTGGCAC -o result2/ATAC_100mixlib_3hIP_rep1_5_2.fq.gz ./data/raw_data/ATAC_100mixlib_3hIP_rep1_2.fq.gz > ATAC_100mixlib_3hIP_rep1_5_2.cutadapt.log 
