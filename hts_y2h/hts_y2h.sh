@@ -229,6 +229,11 @@ function main() {
     local out_dir=$1
     local fq1=$2
     local fq2=$3
+
+    # 0. check input files
+    [[ ! -f ${fq1} || ! ${fq1} = *fq.gz ]] && echo "fq1, not .fq.gz: ${fq1}" && return 1
+    [[ ! -f ${fq2} || ! ${fq2} = *fq.gz ]] && echo "fq2, not .fq.gz: ${fq2}" && return 1
+
     # 1. extract/trim attL
     echo "[1/4] trimming attL"
     out_dir1="${out_dir}/1.trim_attL"
