@@ -220,6 +220,8 @@ function merge_bed_by_id() {
     # out1="${out_dir}/$(basename ${bed1/.bed/.read12.bed})"
     # [[ ! -f ${out2} ]] && \
     #     awk 'FNR==NR {a[$4]=$8; next} {if($4 in a){print $4,$8,a[$4]}}' ${bed2} ${bed1} > ${out2}
+    ## log
+    echo "... $(wc -l ${out1})"
 }
 export -f merge_bed_by_id
 
