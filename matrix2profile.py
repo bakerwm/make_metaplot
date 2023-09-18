@@ -118,6 +118,13 @@ class Matrix2profile(object):
         if isinstance(self.plotTitle, str):
             if p.match(self.plotTitle) is None:
                 self.plotTitle = f'"{self.plotTitle}"'
+        lc = [
+            'best', 'upper-left', 'upper-center', 'upper-right', 
+            'lower-left', 'lower-center', 'lower-right', 
+            'center-left', 'center', 'center-right'
+        ]
+        if not self.legendLocation in lc:
+            self.legendLocation = 'best'
 
 
     def update_colors(self):

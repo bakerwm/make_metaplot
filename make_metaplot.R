@@ -392,8 +392,8 @@ update_axis_range_y <- function(x, y_min = NULL, y_max = NULL) {
   # # fix y_min and y_max
   # y_min <- min(c(y_min, head(breaks, 1), min(x)))
   # y_max <- max(c(y_max, tail(breaks, 1), max(x)))
-  y_min <- ifelse(inherits(y_min, "numeric"), y_min, min(x))
-  y_max <- ifelse(inherits(y_max, "numeric"), y_max, max(x))
+  y_min <- ifelse(is.numeric(y_min), y_min, min(x))
+  y_max <- ifelse(is.numeric(y_max), y_max, max(x))
   # output
   list(y_min = y_min, y_max = y_max)
 }
@@ -1186,7 +1186,7 @@ plot_profile <- function(m, filename = NULL, ...) {
 #'
 #' @export
 plot_profile_ss <- function(m1, m2,  filename = NULL, ...) {
-  # parse arugments from matrix_header + ...
+  # parse arguments from matrix_header + ...
   args <- .setup_profile_params(m = m1, config = NULL, ...) # ... from config?
   #----------------------------------------------------------------------------#
   # 0. Loading matrix from file
@@ -1310,3 +1310,10 @@ plot_profile_ss <- function(m1, m2,  filename = NULL, ...) {
 # m2 = "results/metaplot/paused_all/fig1G/2.bw2matrix/fig1.G.ChrRNA_rmPcf11.genebody_anti.mat.gz"
 # ay = "data/config/metaplot/paused_all/fig1G/fig1.G.ChrRNA_rmPcf11.metaplot.genebody.yaml"
 #
+
+# x = '/data/yulab/wangming/work/yu_2023/projects/20230615_dlj_PRO_yy337/demo2/results/by_rpm/metaplot/data/config/fig1.PRO_YY337.tso.merge.tss.yaml'
+# m1 = '/data/yulab/wangming/work/yu_2023/projects/20230615_dlj_PRO_yy337/demo2/results/by_rpm/metaplot/results/2.bw2matrix/fig1.PRO_YY337.tso.merge.tss_sens.mat.gz'
+# m2 = '/data/yulab/wangming/work/yu_2023/projects/20230615_dlj_PRO_yy337/demo2/results/by_rpm/metaplot/results/2.bw2matrix/fig1.PRO_YY337.tso.merge.tss_anti.mat.gz'
+
+
+
