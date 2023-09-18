@@ -10,6 +10,7 @@ How to?
 3. rename gene_name: "gene_name:chr:TSS"
 4. convert to BED6 format, tss-start, tss-end
 
+## see script: fetch_ensembl_tss.py
 # Download TSS records from Ensembl-BioMart #
 1. access to: http://nov2020.archive.ensembl.org/biomart/martview
 2. set parameters: 

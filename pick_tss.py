@@ -46,18 +46,18 @@ def pick_tss(x, bam, **kwargs):
     args.update(kwargs)
     overwrite = args.get('overwrite', False)
     # 1. extract TSS region
-    tss_f = get_tss_file(x, fmt='bed', **args)
+    tss_f = get_tss_file(x, fmt='gtf', **args)
     # 2. count reads on TSS regions
     args['prefix'] = os.path.basename(os.path.splitext(tss_f)[0]) # update name
     tss_fc = count_region(x=tss_f, bam=bam, **args)
     # 3. pick TSS sites
-    tss_top = pick_top_tss(tss_fc, overwrite)
+    tss_top = pick_top_tss(tss_fc, overwrite=True)
     # 4. convert TSS to single-base BED format
-    tss_top_fixed = recover_tss(tss_top) # retrieve from total TSS, by gene_name
-    # # 5. save top_tss to main directory
-    # tss = os.path.join(args['out_dir'], os.path.basename(tss_top_fixed))
-    # symlink_file(tss_top_fixed, tss)
-    return tss_top_fixed #_top_fixed
+    # tss_top_fixed = recover_tss(tss_top) # retrieve from total TSS, by gene_name
+    # # # 5. save top_tss to main directory
+    # # tss = os.path.join(args['out_dir'], os.path.basename(tss_top_fixed))
+    # # symlink_file(tss_top_fixed, tss)
+    # return tss_top_fixed #_top_fixed
 
 
 def pick_top_tss(x, overwrite=False):
@@ -76,30 +76,38 @@ def pick_top_tss(x, overwrite=False):
     d = {}
     for p in load_fc(x):
         # dup gene names in multiple chromosome
-        g,c,_ = p[0].split(':', 2) # fix gene_name:tss
-        k = '{}:{}'.format(g,c) # gene+chr
+        # g,c,_ = p[0].split(':', 2) # chr:gene:tss
+        c,g,t = p[0].split(':',2) # chr:gene:tss 
+        # k = '{}:{}'.format(g,c) # 
+        k = f'{c}:{g}' # chr:gene
         dg = d.get(k, [])
-        dg.append(p)
+        dg.append(p) # multiple tss for each gene
         d.update({k:dg})
     # pick strongest tss
-    print('Number of TSSs for gene: {}'.format(len(d)))
+    print('Number of genes: {}'.format(len(d)))
     # choose top tss
     # choose distal tss, for multiple TSSs with equal counts
     with open(x_new, 'wt') as w:
-        for k,fc in d.items(): # k=gene+chr
-            g,c = k.split(':', 1)
+        for k,fc in d.items(): # k=gene+chr, fc=list[fc]
+            c,g = k.split(':', 1)
             n = [float(i[6]) for i in fc] # count in column-7
             max_idx = [i for i,j in enumerate(n) if j == max(n)] # top TSS
             if len(max_idx) == 1:
-                max_fc = fc[max_idx[0]]
+                max_fc = fc[max_idx[0]] # record
             else:
                 fc2 = [j for i,j in enumerate(fc) if i in max_idx]
                 max_fc = pick_distal_tss(fc2) # distal TSS
             # fix BED start, 0-index
-            max_fc[2] = str(int(max_fc[2])-1) 
-            t = max_fc[1:4]+[g, 254, max_fc[4]] # BED format
-            t = list(map(str, t))
-            w.write('\t'.join(t)+'\n')
+            try:
+                # max_fc[2] = str(int(max_fc[2])-1) 
+                g,c,tss = max_fc[0].split(':', 2) # chr:gene:tss
+                bed = [max_fc[1], int(tss)-1, tss, g, max_fc[6], max_fc[4] ]
+                bed = list(map(str, bed))
+            except:
+                continue # skipped
+            # t = max_fc[1:4]+[g, 254, max_fc[4]] # BED format
+            # t = list(map(str, t))
+            w.write('\t'.join(bed)+'\n')
     return x_new
 
 
@@ -112,12 +120,16 @@ def pick_distal_tss(x):
     determine the distal TSS
     """
     try:
-        s = [int(i[2]) for i in x] # gene_id, chr, start, end, strand, length, count
+        # s = [int(i[2]) for i in x] # gene_id, chr, start, end, strand, length, count
+        tss = [i[0].split(':')[2] for i in x] # gene:chr:tss=gene_id
+        tss = list(map(int, tss))
     except:
-        print('!A-3', x)
+        # print('!A-3', x)
         sys.exit(1)
-    distal_s = min(s) if x[0][4] == '+' else max(s)
-    return x[s.index(distal_s)]
+    # distal_s = min(s) if x[0][4] == '+' else max(s)
+    distal_tss = min(tss) if x[0][4] == '+' else max(tss)
+    # return x[s.index(distal_s)]
+    return x[tss.index(distal_tss)] # return fc
 
 
 def recover_tss(x, overwrite=False):
@@ -193,19 +205,21 @@ def get_tss_file(x, fmt='bed', **kwargs):
     if not isinstance(args['prefix'], str):
         args['prefix'] = os.path.basename(os.path.splitext(x)[0])
     args['out_dir'] = fix_out_dir(args['out_dir'])
-    n = args['prefix']+'.TSSR.{}_TSS_{}'.format(args['tss_up'], args['tss_down'])
-    out = os.path.join(args['out_dir'], n+'.'+fmt)
+    # update name
+    name = f"{args['prefix']}.TSSR.{args['tss_up']}_TSS_{args['tss_down']}"
+    # n = args['prefix']+'.TSSR.{}_TSS_{}'.format(args['tss_up'], args['tss_down'])
+    out = os.path.join(args['out_dir'], name+'.'+fmt)
     # message
     msg = 'TSS region: --[({}bp)--TSS--({}bp)]--'.format(args['tss_up'], args['tss_down'])
     print(msg)
-    if os.path.exists(out) and args.get('overwrite', False) is False:
-        print('file exists: {}'.format(out))
-    else:
-        with xopen(out, 'wt') as w:
-            for b in get_tss_region(x, **args):
-                if fmt == 'gtf':
-                    b = bed2gtf(b, 'gene')
-                w.write('\t'.join(b)+'\n')
+    # if os.path.exists(out) and args.get('overwrite', False) is False:
+    #     print('file exists: {}'.format(out))
+    # else:
+    with xopen(out, 'wt') as w:
+        for b in get_tss_region(x, **args):
+            if fmt == 'gtf':
+                b = bed2gtf(b, 'gene')
+            w.write('\t'.join(b)+'\n')
     return out
 
 
@@ -232,8 +246,6 @@ def get_tss_region(x, tss_up=150, tss_down=150, **kwargs):
                                                  |--tss_down--|--tss_up--|
                                                  (.......TSS rgion.......)
     """
-    # print('!B-2', kwargs, type(tss_up), type(tss_down))
-    # is_valid_bed(x)
     with xopen(x) as r:
         for l in r:
             p = l.strip().split('\t') # BED6
@@ -284,11 +296,12 @@ def count_region(x, bam, **kwargs):
     args_fc = {
         'gtf': gtf,
         'bam_list': bam,
-        'outdir': args['out_dir'],
+        'out_dir': args['out_dir'],
         'prefix': args['prefix']+'.txt',
         'feature_type': 'gene',
     }
     # index bam file
+    # print('!A-1', args_fc['out_dir'])
     if not os.path.exists(bam+'.bai'):
         pysam.index(bam)
     fc = FeatureCounts(**args_fc)

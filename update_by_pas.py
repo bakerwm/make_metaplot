@@ -14,7 +14,7 @@ import os
 import sys
 from xopen import xopen
 from hiseq.utils.tabix_utils import Tabix
-
+import tabix # pytabix
 
 def distal_pas_in_tz(x, pas, y, overwrite=False):
     """
@@ -41,7 +41,6 @@ def pick_distal_pas(gene, pas_list):
                     pas = i[2] if pas < i[2] else pas
     return pas
                 
-
 
 def distal_pas_in_gb(gene_bed, pas_bed, gene_pas, tes_for_na=True, overwrite=False):
     """

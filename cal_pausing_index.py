@@ -104,7 +104,7 @@ def cal_pidx(tss_count, gb_count, scale=1, pi_ver=1, overwrite=False, **kwargs):
                 try:
                     p = '{:.4f}'.format(float(v_tss[-1]) / float(v_gb[-1]))
                 except ZeroDivisionError as e:
-                    print('gene:{}, divided by zero'.format(k))
+                    # print('gene:{}, divided by zero'.format(k))
                     p = 0
                 # print('!A-1', p, v_tss[-1], v_gb[-1])
                 # output
@@ -331,7 +331,7 @@ def get_genebody_region(x, **kwargs):
                 if p[5] == '+':
                     s = int(s + (e - s) * gb_up)
                 else:
-                    e = int(e - (e - s) * gb_dup)
+                    e = int(e - (e - s) * gb_up)
             else:
                 raiseExceptions('unknown gb_down={}'.format(gb_down))
             if s > e:
