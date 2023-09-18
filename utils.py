@@ -505,6 +505,15 @@ def is_valid_bed(x):
     return out
 
 
+def is_valid_gtf(x):
+    # to-do: check file content
+    out = False
+    if isinstance(x, str):
+        x_ext = os.path.splitext(x)[1]
+        out = x_ext.lower() in ['.gtf', '.gtf.gz']
+    return out 
+
+
 def is_valid_matrix(x):
     """
     Check if x is valid matrix file
@@ -581,8 +590,9 @@ def load_matrix(x, header_only=False):
         for i, e in enumerate(gb[1:], start=1):
             s = gb[i-1] # start
             gli = gl[i-1] # group labels
-            gli = gli.replace('_fwd.bed', '.bed') # updated
-            gli = gli.replace('_rev.bed', '.bed') # updated
+            # update group_labels, remove _fwd/_rev
+            gli = gli.replace('_fwd', '') # updated
+            gli = gli.replace('_rev', '') # updated
             d.update({gli:m[s:e]}) # save to dict
         out = d
     return out

@@ -20,6 +20,12 @@ $ computeMatrix reference-point \
   --unscaled5prime 0 --unscaled3prime 0 --skipZeros \
   --averageTypeBins mean --blackListFileName bl.bed \
   --outFileSortedRegions sorted.bed
+
+# for GTF regions
+--metagene
+--transcriptID transcript
+--exonID exon
+--transcript_id_designator transcript_id
 """
 
 
@@ -32,7 +38,7 @@ import shutil
 from matrix_rbind import Matrix_rbind
 from utils import (
     make_config, update_obj, dump_yaml, file_abspath, file_prefix,
-    is_valid_bigwig, is_valid_bed, is_valid_file, fix_out_dir,
+    is_valid_bigwig, is_valid_bed, is_valid_gtf, is_valid_file, fix_out_dir,
     load_matrix, log
 )
 from parse_args import add_io_parser, add_bw_parser, get_bw_args
@@ -92,16 +98,17 @@ class Bw2matrix_ns(object):
         """
         default arguments [38]
         to-do: outFileSortedRegions, outFileNameMatrix
-        """        
+        no-value-parameters: --metagene, --skipZeros, --missingDataAsZero
+        """
         alist = [
-            'regionsFileName', 'scoreFileName', 'outFileName', 
-            'outFileNameMatrix', 'outFileSortedRegions', 'samplesLabel', 
-            'regionBodyLength', 'unscaled5prime', 'unscaled3prime', #!!!
-            'referencePoint', 'nanAfterEnd', #!!!
-            'beforeRegionStartLength', 'afterRegionStartLength', 'binSize', 
+            'regionsFileName', 'scoreFileName', 'outFileName',
+            'outFileNameMatrix', 'outFileSortedRegions', 'samplesLabel',
+            'regionBodyLength', 'unscaled5prime', 'unscaled3prime',
+            'referencePoint', 'nanAfterEnd',
+            'beforeRegionStartLength', 'afterRegionStartLength', 'binSize',
             'sortRegions', 'sortUsing', 'sortUsingSamples', 'averageTypeBins',
-            'minThreshold', 'maxThreshold', 'blackListFileName', 
-            'scale', 'numberOfProcessors' 'metagene', 'transcriptID', 'exonID',
+            'minThreshold', 'maxThreshold', 'blackListFileName',
+            'scale', 'numberOfProcessors', 'transcriptID', 'exonID',
             'transcript_id_designator'
         ]
         return alist
@@ -113,12 +120,12 @@ class Bw2matrix_ns(object):
         """
         alist = self.basic_args()
         d = {i:getattr(self, i, None) for i in alist}
-        self = update_obj(self, d, force=True) # update        
+        self = update_obj(self, d, force=True) # update
         self.whatToShow = '"{}"'.format(self.whatToShow) # update whatToShow
         if self.matrix_type == 'scale-regions':
             self.sub_cmd = 'scale-regions'
             rps = ['referencePoint', 'nanAfterEnd']
-            [setattr(self, i, None) for i in rps]            
+            [setattr(self, i, None) for i in rps]
         else:
             self.sub_cmd = 'reference-point'
             srs = [
@@ -130,7 +137,15 @@ class Bw2matrix_ns(object):
             self.prefix = 'bw2matrix'
         if not is_valid_file(self.bw_list, is_valid_bigwig):
             raise ValueError('bigWig file illegal: {}'.format(self.bw_list))
-        if not is_valid_file(self.region_list, is_valid_bed):
+        # check file extension
+        f_ext = [os.path.splitext(i)[1] for i in self.region_list]
+        if set(f_ext) == {'.bed'}:
+            region_func = is_valid_bed
+        elif set(f_ext) == {'.gtf'}:
+            region_func = is_valid_gtf
+        else:
+            raise ValueError('unknown region files:')
+        if not is_valid_file(self.region_list, region_func):
             raise ValueError('region files illegal: {}'.format(self.region_list))
 
 
@@ -169,7 +184,7 @@ class Bw2matrix_ns(object):
         }
         self = update_obj(self, args, force=True)
 
-    
+
     def get_cmd(self):
         """
         construct arguments to command line
@@ -177,9 +192,12 @@ class Bw2matrix_ns(object):
         alist = self.basic_args()
         args = {i:getattr(self, i, None) for i in alist}
         dlist = ['--{} {}'.format(k, v) for k,v in args.items() if v is not None]
-        bb = ['missingDataAsZero', 'skipZeros'] # no arguments
-        bba = ['--'+i for i in bb if getattr(self, i, None)]
-        dlist += bba # add arguments
+        # bb = ['missingDataAsZero', 'skipZeros'] # no arguments
+        # bba = ['--'+i for i in bb if getattr(self, i, None)]
+        # dlist += bba # add arguments
+        for i in ['missingDataAsZero', 'skipZeros', 'metagene']:
+            if getattr(self, i, False):
+                dlist += ['--'+i]
         dline = ' '.join(dlist) # to cmd line
         # main args
         cmd = ' '.join([
@@ -191,7 +209,7 @@ class Bw2matrix_ns(object):
             '--outFileNameMatrix {}'.format(self.matrix_value),
             '--outFileSortedRegions {}'.format(self.sorted_regions_file),
             '--numberOfProcessors {}'.format(self.numberOfProcessors),
-            dline,            
+            dline,
             '1> {}'.format(self.stdout),
             '2> {}'.format(self.stderr),
         ])
@@ -229,7 +247,7 @@ class Bw2matrix_ss(object):
         dump_yaml(self.__dict__, self.config) # save config
 
 
-    def init_files(self):        
+    def init_files(self):
         self.out_dir = fix_out_dir(self.out_dir)
         self.out_dir = file_abspath(self.out_dir)
         self.project_dir = self.out_dir
@@ -244,39 +262,56 @@ class Bw2matrix_ss(object):
         """
         split region files by strand
         """
+        # guess file extension
+        fext = [os.path.splitext(i)[1] for i in self.region_list]
+        if len(set(fext)) > 1:
+            raise ValueError('more than 1 type region files found, use BED or GTF only')
         # strand: fwd, +
         # rf_fwd = [os.path.splitext(i)[0] + '_fwd.bed' for i in self.region_list]
-        rf_fwd = [os.path.join(self.project_dir, file_prefix(i)+'_fwd.bed') for i in self.region_list]
-        [self.split_bed(a, b, '+', self.overwrite) for a,b in zip(self.region_list, rf_fwd)]
+        rf_fwd = [os.path.join(self.project_dir, file_prefix(i)+'_fwd'+fext[0]) for i in self.region_list]
+        [self.split_region_file(a, b, '+', self.overwrite) for a,b in zip(self.region_list, rf_fwd)]
         # strand: rev, -
         #  rf_rev = [os.path.splitext(i)[0] + '_rev.bed' for i in self.region_list]
-        rf_rev = [os.path.join(self.project_dir, file_prefix(i)+'_rev.bed') for i in self.region_list]
-        [self.split_bed(a, b, '-', self.overwrite) for a,b in zip(self.region_list, rf_rev)]
+        rf_rev = [os.path.join(self.project_dir, file_prefix(i)+'_rev'+fext[0]) for i in self.region_list]
+        [self.split_region_file(a, b, '-', self.overwrite) for a,b in zip(self.region_list, rf_rev)]
         # output
         return [rf_fwd, rf_rev] # file lists
 
 
-    def split_bed(self, x, out, strand='+', overwrite=False):
+    def split_region_file(self, x, out, strand='+', overwrite=False):
         """
-        Split region BED files by strand
+        Split region BED/GTF files by strand
         * : original
         + : _fwd
         - : _rev
         """
         xname = file_prefix(x)
         if os.path.exists(out) and overwrite is False:
-            print('split_bed() skipped, file exists: {}'.format(out))
+            print('split_region_file() skipped, file exists: {}'.format(out))
         else:
+            ftag = 0
+            fext = os.path.splitext(x)[1]
             with open(x) as r, open(out, 'wt') as w:
                 for line in r:
                     s = line.strip().split('\t')
                     if len(s) > 5:
-                        if s[5] == strand or strand == '*':
+                        if fext == '.bed':
+                            str_idx = 5
+                        elif fext == '.gtf':
+                            str_idx = 6
+                        else:
+                            continue
+                        if s[str_idx] == strand or strand == '*':
+                            ftag += 1
                             w.write(line)
                     elif strand == '*':
+                        ftag += 1
                         w.write(line)
                     # else:
                     #     pass
+            # check empty
+            if ftag == 0:
+                raise ValueError('No region files found, check input file: ', x)
         return out
 
 
