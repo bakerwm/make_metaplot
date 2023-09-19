@@ -131,9 +131,11 @@ def get_bw_args(**kwargs):
 
 def get_plot_args(**kwargs):
     """
-    Argumetns for plotProfile, plotHeatmap of deeptools
+    Arguments for plotProfile, plotHeatmap of deeptools
     """
-    args = {     
+    args = {
+        'add_x_ticks_extra': True,
+        'add_genebody_bar': True,
         'afterRegionStartLength': 2000,
         'averageTypeBins': None,
         'beforeRegionStartLength': 2000,
@@ -147,6 +149,7 @@ def get_plot_args(**kwargs):
         'colorMap': None,
         'colors': None,
         'endLabel': 'TES',
+        'full_version': True,
         'heatmapHeight': 12,
         'heatmapWidth': 4,
         'kmeans': None,
@@ -155,6 +158,7 @@ def get_plot_args(**kwargs):
         'numPlotsPerRow': 2,
         'matrix': None,
         'matrix_type': 'scale-regions',
+        'metagene': False,
         'missingDataAsZero': True,
         'numberOfProcessors': 12,
         'out_dir': None,
